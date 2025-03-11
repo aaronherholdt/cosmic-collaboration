@@ -5257,6 +5257,4 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     }
-
-    // Add these CSS styles in your styles.css file
 }); 
