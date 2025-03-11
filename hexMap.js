@@ -4968,4 +4968,295 @@ document.addEventListener('DOMContentLoaded', () => {
             y: (star.y - offsetY) * scale + canvas.height / 2
         };
     }
+
+    // Improve setupTouchControls function for iPad compatibility
+    function setupTouchControls() {
+        const canvas = document.getElementById('worldMap');
+        let isDragging = false;
+        let lastX, lastY;
+        let lastTouchDistance = 0;
+        let movementTimeout = null;
+        
+        // Track if we're in a pinch-zoom gesture
+        let isPinching = false;
+        
+        // Make sure touch events have passive: false to prevent scrolling
+        canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+        canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+        canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+        
+        function handleTouchStart(e) {
+            e.preventDefault(); // Prevent default to avoid scrolling
+            
+            if (e.touches.length === 1) {
+                // Single touch - either drag or tap to move
+                isDragging = true;
+                const touch = e.touches[0];
+                lastX = touch.clientX;
+                lastY = touch.clientY;
+                
+                // Set a timeout to check if this is a tap or drag
+                movementTimeout = setTimeout(() => {
+                    // If we still have touch and haven't moved much, it's a tap-to-move
+                    if (isDragging) {
+                        const canvasRect = canvas.getBoundingClientRect();
+                        const touchX = touch.clientX - canvasRect.left;
+                        const touchY = touch.clientY - canvasRect.top;
+                        
+                        // Convert screen position to world position
+                        const worldX = (touchX / zoomLevel) + cameraX;
+                        const worldY = (touchY / zoomLevel) + cameraY;
+                        
+                        // Move player to the tapped location
+                        player.targetX = worldX;
+                        player.targetY = worldY;
+                        player.isMoving = true;
+                        
+                        // Show a visual indicator at the touch point
+                        showTouchIndicator(touchX, touchY);
+                    }
+                }, 200); // Short delay to differentiate tap from drag
+                
+            } else if (e.touches.length === 2) {
+                // Pinch zoom gesture
+                isPinching = true;
+                isDragging = false;
+                lastTouchDistance = getPinchDistance(e.touches[0], e.touches[1]);
+            }
+        }
+        
+        function handleTouchMove(e) {
+            e.preventDefault(); // Prevent scrolling
+            
+            if (e.touches.length === 1 && isDragging) {
+                // Clear the timeout since we're moving (not a tap)
+                if (movementTimeout) {
+                    clearTimeout(movementTimeout);
+                    movementTimeout = null;
+                }
+                
+                // Regular dragging (pan camera)
+                const touch = e.touches[0];
+                const dx = touch.clientX - lastX;
+                const dy = touch.clientY - lastY;
+                
+                // Pan the camera
+                cameraX -= dx / zoomLevel;
+                cameraY -= dy / zoomLevel;
+                
+                // Update last position
+                lastX = touch.clientX;
+                lastY = touch.clientY;
+                
+            } else if (e.touches.length === 2 && isPinching) {
+                // Pinch zoom
+                const currentDistance = getPinchDistance(e.touches[0], e.touches[1]);
+                const distanceDelta = currentDistance - lastTouchDistance;
+                
+                // Adjust zoom level based on pinch
+                if (Math.abs(distanceDelta) > 5) {
+                    const zoomDelta = distanceDelta * 0.005;
+                    zoomLevel = Math.max(0.5, Math.min(2.0, zoomLevel + zoomDelta));
+                    lastTouchDistance = currentDistance;
+                }
+            }
+        }
+        
+        function handleTouchEnd(e) {
+            // Clear any pending tap timeout
+            if (movementTimeout) {
+                clearTimeout(movementTimeout);
+                movementTimeout = null;
+            }
+            
+            // Handle single-tap movement
+            if (isDragging && e.touches.length === 0 && !isPinching) {
+                // This was a tap - check if it was short enough to be considered a tap
+                const canvasRect = canvas.getBoundingClientRect();
+                const touchX = lastX - canvasRect.left;
+                const touchY = lastY - canvasRect.top;
+                
+                // Convert screen position to world position
+                const worldX = (touchX / zoomLevel) + cameraX;
+                const worldY = (touchY / zoomLevel) + cameraY;
+                
+                // Check if this is a click on a star
+                let clickedOnStar = false;
+                for (const star of starSystems) {
+                    const distance = Math.sqrt(Math.pow(worldX - star.x, 2) + Math.pow(worldY - star.y, 2));
+                    if (distance < star.radius) {
+                        clickedOnStar = true;
+                        handleCanvasClick(worldX, worldY);
+                        break;
+                    }
+                }
+                
+                // If not clicking on a star, then move
+                if (!clickedOnStar) {
+                    player.targetX = worldX;
+                    player.targetY = worldY;
+                    player.isMoving = true;
+                    
+                    // Show a visual indicator
+                    showTouchIndicator(touchX, touchY);
+                }
+            }
+            
+            // Reset flags
+            isDragging = false;
+            isPinching = false;
+        }
+        
+        // Helper function to show a touch indicator
+        function showTouchIndicator(x, y) {
+            const indicator = document.createElement('div');
+            indicator.className = 'touch-indicator';
+            indicator.style.position = 'absolute';
+            indicator.style.left = `${x}px`;
+            indicator.style.top = `${y}px`;
+            indicator.style.width = '20px';
+            indicator.style.height = '20px';
+            indicator.style.borderRadius = '50%';
+            indicator.style.border = '2px solid white';
+            indicator.style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
+            indicator.style.transform = 'translate(-50%, -50%)';
+            indicator.style.pointerEvents = 'none';
+            indicator.style.zIndex = '1000';
+            document.body.appendChild(indicator);
+            
+            // Add animation
+            indicator.animate([
+                { opacity: 1, transform: 'translate(-50%, -50%) scale(0.5)' },
+                { opacity: 0, transform: 'translate(-50%, -50%) scale(1.5)' }
+            ], {
+                duration: 1000,
+                easing: 'ease-out'
+            }).onfinish = () => {
+                if (indicator.parentNode) {
+                    indicator.parentNode.removeChild(indicator);
+                }
+            };
+        }
+        
+        // Add alternative movement controls for accessibility
+        addDirectionalControls();
+    }
+
+    // Add directional control buttons for easier movement on mobile
+    function addDirectionalControls() {
+        const controlsContainer = document.createElement('div');
+        controlsContainer.className = 'direction-controls';
+        controlsContainer.style.position = 'absolute';
+        controlsContainer.style.bottom = '100px';
+        controlsContainer.style.right = '20px';
+        controlsContainer.style.display = 'grid';
+        controlsContainer.style.gridTemplateColumns = 'repeat(3, 1fr)';
+        controlsContainer.style.gridTemplateRows = 'repeat(3, 1fr)';
+        controlsContainer.style.gap = '5px';
+        controlsContainer.style.zIndex = '1000';
+        
+        // Create direction buttons with positions in the grid
+        const directions = [
+            { dir: 'nw', icon: '↖', row: 1, col: 1 },
+            { dir: 'n', icon: '↑', row: 1, col: 2 },
+            { dir: 'ne', icon: '↗', row: 1, col: 3 },
+            { dir: 'w', icon: '←', row: 2, col: 1 },
+            { dir: 'c', icon: '•', row: 2, col: 2 },
+            { dir: 'e', icon: '→', row: 2, col: 3 },
+            { dir: 'sw', icon: '↙', row: 3, col: 1 },
+            { dir: 's', icon: '↓', row: 3, col: 2 },
+            { dir: 'se', icon: '↘', row: 3, col: 3 }
+        ];
+        
+        directions.forEach(d => {
+            const btn = document.createElement('button');
+            btn.innerHTML = d.icon;
+            btn.className = 'direction-btn';
+            btn.style.width = '40px';
+            btn.style.height = '40px';
+            btn.style.borderRadius = '50%';
+            btn.style.backgroundColor = d.dir === 'c' ? 'rgba(0,0,0,0.2)' : 'rgba(70, 130, 180, 0.7)';
+            btn.style.border = 'none';
+            btn.style.color = 'white';
+            btn.style.fontSize = '18px';
+            btn.style.display = 'flex';
+            btn.style.justifyContent = 'center';
+            btn.style.alignItems = 'center';
+            btn.style.gridRow = d.row;
+            btn.style.gridColumn = d.col;
+            btn.style.cursor = 'pointer';
+            btn.style.boxShadow = '0 0 5px rgba(0,0,0,0.3)';
+            
+            if (d.dir !== 'c') {
+                btn.addEventListener('click', () => movePlayerInDirection(d.dir));
+                btn.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    movePlayerInDirection(d.dir);
+                });
+            } else {
+                btn.addEventListener('click', () => player.isMoving = false);
+                btn.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    player.isMoving = false;
+                });
+            }
+            
+            controlsContainer.appendChild(btn);
+        });
+        
+        document.body.appendChild(controlsContainer);
+    }
+
+    // Helper function to move player in a direction
+    function movePlayerInDirection(direction) {
+        const moveDistance = 100; // Adjust based on your game scale
+        
+        // Calculate target based on direction
+        switch(direction) {
+            case 'n': 
+                player.targetY = player.y - moveDistance;
+                player.targetX = player.x;
+                break;
+            case 's': 
+                player.targetY = player.y + moveDistance;
+                player.targetX = player.x;
+                break;
+            case 'e': 
+                player.targetX = player.x + moveDistance;
+                player.targetY = player.y;
+                break;
+            case 'w': 
+                player.targetX = player.x - moveDistance;
+                player.targetY = player.y;
+                break;
+            case 'ne': 
+                player.targetX = player.x + moveDistance * 0.7;
+                player.targetY = player.y - moveDistance * 0.7;
+                break;
+            case 'nw': 
+                player.targetX = player.x - moveDistance * 0.7;
+                player.targetY = player.y - moveDistance * 0.7;
+                break;
+            case 'se': 
+                player.targetX = player.x + moveDistance * 0.7;
+                player.targetY = player.y + moveDistance * 0.7;
+                break;
+            case 'sw': 
+                player.targetX = player.x - moveDistance * 0.7;
+                player.targetY = player.y + moveDistance * 0.7;
+                break;
+        }
+        
+        player.isMoving = true;
+        
+        // Send position update to server if connected
+        if (socket && socket.connected) {
+            socket.emit('updatePosition', {
+                x: player.targetX,
+                y: player.targetY
+            });
+        }
+    }
+
+    // Add these CSS styles in your styles.css file
 }); 
