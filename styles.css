@@ -1486,7 +1486,6 @@ button:hover {
 .touch-device #playerList::-webkit-scrollbar {
   display: none; /* Hide scrollbar for Chrome/Safari */
 }
-
 /* Indicate scrollable areas */
 .touch-device .rocket-options::after,
 .touch-device #playerList::after {
