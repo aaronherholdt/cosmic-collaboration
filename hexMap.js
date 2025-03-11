@@ -63,57 +63,104 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize Socket.io connection
     function initializeSocketConnection() {
-        // In a real implementation, you would connect to your server
-        // socket = io('http://your-server-url');
+        // Connect to the server using the current URL
+        socket = io();
         
-        // For demo purposes, we'll simulate socket events
-        simulateSocketConnection();
-        
-        // Set up socket event listeners (in a real implementation)
-        /*
+        // Display loading indicator
+        const loadingMsg = document.createElement('div');
+        loadingMsg.className = 'system-notification';
+        loadingMsg.textContent = 'Connecting to server...';
+        document.body.appendChild(loadingMsg);
+
         socket.on('connect', () => {
-            isConnected = true;
-            currentPlayerId = socket.id;
-        });
-        
-        socket.on('playerJoined', (player) => {
-            addPlayer(player.id, player.name, player.rocketType);
-        });
-        
-        socket.on('playerLeft', (playerId) => {
-            removePlayer(playerId);
-        });
-        
-        socket.on('gameStarted', () => {
-            startGame();
-        });
-        
-        socket.on('playerMoved', (data) => {
-            updatePlayerPosition(data.id, data.x, data.y, data.targetX, data.targetY);
-        });
-        
-        socket.on('resourceHarvested', (data) => {
-            updatePlayerInventory(data.id, data.resourceType, data.amount);
-        });
-        
-        socket.on('hubContribution', (data) => {
-            updateHubProgress(data.resourceType, data.amount);
-        });
-        
-        socket.on('pingPlaced', (data) => {
-            addPing(data.x, data.y, data.message, data.sender);
-        
-            socket.on('harvestHistoryUpdate', (data) => {
-            if (data.starId && data.history) {
-                harvestHistory.set(data.starId, data.history);
-                if (currentOpenStar && currentOpenStar.id === data.starId) {
-                    updateHarvestHistoryDisplay(currentOpenStar);
+            console.log('Connected to server!');
+            loadingMsg.textContent = 'Connected!';
+            setTimeout(() => {
+                if (loadingMsg.parentNode) {
+                    loadingMsg.parentNode.removeChild(loadingMsg);
                 }
+            }, 2000);
+            
+            // Disable simulation when connected to real server
+            useSimulation = false;
+            
+            // Join the game with player info
+            socket.emit('joinGame', {
+                playerName: currentPlayerName,
+                rocketType: player.rocketType
+            });
+        });
+
+        socket.on('connect_error', (error) => {
+            console.error('Connection error:', error);
+            loadingMsg.textContent = 'Connection error! Using simulation mode.';
+            setTimeout(() => {
+                if (loadingMsg.parentNode) {
+                    loadingMsg.parentNode.removeChild(loadingMsg);
+                }
+            }, 3000);
+            
+            // Fall back to simulation mode
+            useSimulation = true;
+            simulateSocketConnection();
+        });
+
+        // Handle game state from server
+        socket.on('gameState', (state) => {
+            // Update your game with the server state
+            console.log('Received game state:', state);
+            
+            // Clear simulated players if any
+            otherPlayers = {};
+            
+            // Add all current players from the server
+            Object.keys(state.players).forEach(playerId => {
+                if (playerId !== socket.id) {
+                    const p = state.players[playerId];
+                    addPlayer(playerId, p.name, p.isHost, p.rocketType);
+                    
+                    // Update positions if available
+                    if (p.position) {
+                        otherPlayers[playerId].x = p.position.x;
+                        otherPlayers[playerId].y = p.position.y;
+                    }
+                }
+            });
+            
+            // Update the player list UI
+            updatePlayerList();
+        });
+
+        // Handle new player joined
+        socket.on('playerJoined', (data) => {
+            console.log('Player joined:', data);
+            showSystemMessage(`${data.name} joined the game!`);
+            
+            // Don't add ourselves again
+            if (data.id !== socket.id) {
+                addPlayer(data.id, data.name, data.isHost, data.rocketType);
+                updatePlayerList();
             }
         });
-        */
 
-        
+        // Handle player left
+        socket.on('playerLeft', (data) => {
+            console.log('Player left:', data);
+            showSystemMessage(`${data.name} left the game`);
+            removePlayer(data.id);
+            updatePlayerList();
+        });
+
+        // Handle other player movement
+        socket.on('playerMoved', (data) => {
+            if (otherPlayers[data.id]) {
+                otherPlayers[data.id].targetX = data.position.x;
+                otherPlayers[data.id].targetY = data.position.y;
+                otherPlayers[data.id].isMoving = true;
+            }
+        });
+
+        // Other socket event handlers...
     }
     
     // Simulate socket connection for demo
@@ -301,20 +348,32 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Start the game
     function startGame() {
-        if (!isHost) return; // Only host can start the game
+        gameStarted = true;
+        switchScreen('waitingRoomScreen', 'gameScreen');
         
-        // In a real implementation, emit to server
-        // socket.emit('startGame');
-        
-        // Switch to game screen
-        switchScreen(waitingRoomScreen, gameScreen);
-        
-        // Set the current player's rocket type
-        player.rocketType = selectedRocketType;
-        
-        // Initialize the Galactic Hub progress display
+        // Initialize the game components
+        initializeGalaxy();
         initializeHubProgress();
-        updateCollaborationPanel(); // Initialize on game start
+        initializeCosmicNexusCore();
+        enhanceResponsiveLayout();
+        
+        // Always connect to real server and fall back to simulation if needed
+        initializeSocketConnection();
+        
+        // Comment out direct simulation calls
+        // simulateSocketConnection();
+        // simulateOtherPlayersJoining();
+        
+        // Initialize player position
+        initializePlayerPosition();
+        
+        // Setup input handlers
+        setupControlButtons();
+        setupTabletLayout();
+        setupTouchControls();
+        
+        // Start the game loop
+        animationLoop();
     }
     
     // Switch between screens
@@ -1747,6 +1806,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Hide explore button when moving
                 hideExploreButton();
             }
+        }
+        
+        // If position changed and we're connected to a server, emit update
+        if (player.isMoving && socket && socket.connected) {
+            socket.emit('updatePosition', {
+                x: player.x,
+                y: player.y
+            });
         }
     }
     
