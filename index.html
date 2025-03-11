@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hexagonal Harvest - Galactic Map</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Socket.IO client library -->
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="screen active">
+        <div class="login-container">
+            <h1>Hexagonal Harvest</h1>
+            <div class="login-form">
+                <input type="text" id="playerNameInput" placeholder="Enter your name" maxlength="15">
+                
+                <div class="rocket-selection">
+                    <h3>Choose Your Rocket</h3>
+                    <div class="rocket-options">
+                        <div class="rocket-option" data-rocket="red">
+                            <div class="rocket-preview rocket-red"></div>
+                            <span>Red Rocket</span>
+                            <div class="rocket-specialty">Specializes in energy resources</div>
+                        </div>
+                        <div class="rocket-option" data-rocket="blue">
+                            <div class="rocket-preview rocket-blue"></div>
+                            <span>Blue Rocket</span>
+                            <div class="rocket-specialty">Specializes in water resources</div>
+                        </div>
+                        <div class="rocket-option" data-rocket="green">
+                            <div class="rocket-preview rocket-green"></div>
+                            <span>Green Rocket</span>
+                            <div class="rocket-specialty">Specializes in organic resources</div>
+                        </div>
+                        <div class="rocket-option" data-rocket="yellow">
+                            <div class="rocket-preview rocket-yellow"></div>
+                            <span>Yellow Rocket</span>
+                            <div class="rocket-specialty">Specializes in mineral resources</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <button id="joinGameBtn">Join Game</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Waiting Room Screen -->
+    <div id="waitingRoomScreen" class="screen">
+        <div class="waiting-room-container">
+            <h1>Waiting Room</h1>
+            <div class="player-list-container">
+                <h2>Players</h2>
+                <ul id="playerList"></ul>
+            </div>
+            <button id="startGameBtn" disabled>Start Game</button>
+        </div>
+    </div>
+
+    <!-- Game Interface (Original Content) -->
+    <div id="gameScreen" class="screen">
+        <div class="game-interface">
+            <canvas id="worldMap"></canvas>
+            
+            <!-- Ping System (moved above the pan-limit-indicator) -->
+            <div id="pingControls" class="ping-controls">
+                <button id="togglePingBtn" class="toggle-ping-btn">Place Marker</button>
+            </div>
+            
+            <div class="pan-limit-indicator">
+                <div>Galaxy Boundary: <span id="distancePercent">0%</span></div>
+                <div class="progress-bar">
+                    <div id="distanceBar" class="progress"></div>
+                </div>
+            </div>
+            
+            <!-- Galactic Hub Progress Tracker -->
+            <div id="hubProgress" class="hub-progress">
+                <h3>Galactic Hub Progress</h3>
+                <div id="resourceGoals"></div>
+                <div id="hubObjective" class="hub-objective">
+                    <p>Unite players to build the Galactic Hub by contributing resources!</p>
+                </div>
+                
+                <!-- Visual Hub Modules -->
+                <div id="hubVisualModules" class="hub-visual-modules">
+                    <div class="hub-module" data-module="energy">
+                        <div class="module-fill"></div>
+                        <div class="module-icon energy-icon"></div>
+                    </div>
+                    <div class="hub-module" data-module="water">
+                        <div class="module-fill"></div>
+                        <div class="module-icon water-icon"></div>
+                    </div>
+                    <div class="hub-module" data-module="core">
+                        <div class="module-fill"></div>
+                        <div class="module-icon core-icon"></div>
+                    </div>
+                    <div class="hub-module" data-module="organic">
+                        <div class="module-fill"></div>
+                        <div class="module-icon organic-icon"></div>
+                    </div>
+                    <div class="hub-module" data-module="mineral">
+                        <div class="module-fill"></div>
+                        <div class="module-icon mineral-icon"></div>
+                    </div>
+                </div>
+                
+                <div id="contributionTracking" class="contribution-tracking">
+                    <h4>Player Contributions</h4>
+                    <div id="playerContributions" class="player-contributions"></div>
+                </div>
+            </div>
+            
+            <!-- Collaboration Panel (New) -->
+            <div id="collaborationPanel" class="collaboration-panel">
+                <h2>Team Objective: Build the Galactic Hub</h2>
+                <p>Work together to gather and contribute resources!</p>
+                <div class="team-contributions">
+                    <h3>Team Contributions</h3>
+                    <ul id="teamContributionsList"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Load the game script -->
+    <script src="hexMap.js"></script>
+</body>
+</html> 
