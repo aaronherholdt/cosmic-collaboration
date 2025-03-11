@@ -114,18 +114,25 @@ document.addEventListener('DOMContentLoaded', () => {
             otherPlayers = {};
             
             // Add all current players from the server
-            Object.keys(state.players).forEach(playerId => {
-                if (playerId !== socket.id) {
-                    const p = state.players[playerId];
-                    addPlayer(playerId, p.name, p.isHost, p.rocketType);
-                    
-                    // Update positions if available
-                    if (p.position) {
-                        otherPlayers[playerId].x = p.position.x;
-                        otherPlayers[playerId].y = p.position.y;
+            if (state.players) {
+                Object.keys(state.players).forEach(playerId => {
+                    if (playerId !== socket.id) {
+                        const p = state.players[playerId];
+                        // Make sure we create the player first
+                        addPlayer(playerId, p.name, p.isHost, p.rocketType);
+                        
+                        // THEN update positions if available (only after player is created)
+                        if (p.position && otherPlayers[playerId]) {
+                            otherPlayers[playerId].x = p.position.x || 0;
+                            otherPlayers[playerId].y = p.position.y || 0;
+                            otherPlayers[playerId].targetX = p.position.x || 0;
+                            otherPlayers[playerId].targetY = p.position.y || 0;
+                        }
                     }
-                }
-            });
+                });
+            } else {
+                console.warn('Received game state without players property');
+            }
             
             // Update the player list UI
             updatePlayerList();
@@ -271,27 +278,28 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Add a player to the list
     function addPlayer(id, name, isPlayerHost = false, rocketType) {
-        // Add to players object
-        players[id] = {
-            id: id,
-            name: name,
-            isHost: isPlayerHost,
-            rocketType: rocketType || 'blue',
-            x: 0,
-            y: 0,
-            targetX: 0,
-            targetY: 0,
-            speed: 5,
-            rotation: 0,
-            isMoving: false,
-            fuel: 100,
-            maxFuel: 100,
-            inventory: {},
-            contributions: { energy: 0, water: 0, organic: 0, mineral: 0 } // Track contributions
-        };
-        
-        // Update the UI
-        updatePlayerList();
+        // Make sure the player doesn't already exist
+        if (!otherPlayers[id]) {
+            otherPlayers[id] = {
+                id: id,
+                name: name || 'Unknown Player',
+                x: 0,
+                y: 0,
+                targetX: 0,
+                targetY: 0,
+                rotation: 0,
+                isMoving: false,
+                isHost: isPlayerHost,
+                rocketType: rocketType || 'blue'
+            };
+            console.log(`Added player: ${name} (${id})`);
+        } else {
+            console.log(`Player ${name} (${id}) already exists, updating properties`);
+            // Update properties of existing player
+            otherPlayers[id].name = name;
+            otherPlayers[id].isHost = isPlayerHost;
+            otherPlayers[id].rocketType = rocketType || otherPlayers[id].rocketType;
+        }
     }
     
     // Remove a player
@@ -5275,4 +5283,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     }
+
+    // Add these CSS styles in your styles.css file
 }); 
