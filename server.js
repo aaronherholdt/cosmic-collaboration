@@ -8,6 +8,21 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
+// Set proper MIME types
+express.static.mime.define({'text/css': ['css']});
+express.static.mime.define({'application/javascript': ['js']});
+
+// Serve static files with correct MIME types
+app.use(express.static(path.join(__dirname, '/'), {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+    } else if (path.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+  }
+}));
+
 // Single game state
 const gameState = {
     players: {},
