@@ -376,10 +376,28 @@ document.addEventListener('DOMContentLoaded', () => {
         animationLoop();
     }
     
-    // Switch between screens
+    // Fix the switchScreen function to handle missing elements
     function switchScreen(fromScreen, toScreen) {
-        fromScreen.classList.remove('active');
-        toScreen.classList.add('active');
+        // Safely get elements and check if they exist
+        const fromElement = document.getElementById(fromScreen);
+        const toElement = document.getElementById(toScreen);
+        
+        // Only try to remove class if element exists
+        if (fromElement) {
+            fromElement.classList.remove('active');
+        } else {
+            console.warn(`Screen element with ID "${fromScreen}" not found`);
+        }
+        
+        // Only try to add class if element exists
+        if (toElement) {
+            toElement.classList.add('active');
+        } else {
+            console.error(`Screen element with ID "${toScreen}" not found`);
+            // If target screen wasn't found, this is a critical error
+            // Try to show a helpful message to the user
+            showSystemMessage("Error switching screens. Please refresh the page.");
+        }
     }
     
     // Initialize the Galactic Hub progress display
