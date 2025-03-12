@@ -362,9 +362,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Add a player to the list
     function addPlayer(id, name, isPlayerHost = false, rocketType) {
-        // Check if player already exists
-        if (!players[id]) { // Check if the key exists in the object
-            // Add new player with consistent structure
+        // Add player to the players object if they don't exist yet
+        if (!players[id]) {
             players[id] = {
                 id: id,
                 name: name,
@@ -375,14 +374,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 targetX: 0,
                 targetY: 0,
                 rotation: 0,
-                isMoving: false
+                isMoving: false,
+                visible: true // Explicitly set visibility
             };
-            console.log(`Player added: ${name} (${id}), Host: ${isPlayerHost}`);
-        } else {
-            console.log(`Player ${name} (${id}) already exists, not adding duplicate`);
+            
+            console.log(`Player added: ${name} (${id}), rocket: ${rocketType}`);
         }
         
+        // If this is the current player, set the currentPlayer reference
+        if (id === currentPlayerId) {
+            currentPlayer = players[id];
+            console.log("Current player reference set:", currentPlayer);
+            
+            // If current player doesn't have a position yet, initialize it
+            if (currentPlayer.x === 0 && currentPlayer.y === 0) {
+                currentPlayer.x = galaxyCenterX + (Math.random() - 0.5) * galaxyRadius * 0.5;
+                currentPlayer.y = galaxyCenterY + (Math.random() - 0.5) * galaxyRadius * 0.5;
+                currentPlayer.targetX = currentPlayer.x;
+                currentPlayer.targetY = currentPlayer.y;
+                
+                // Sync with player object (if different from currentPlayer)
+                if (player) {
+                    player.x = currentPlayer.x;
+                    player.y = currentPlayer.y;
+                    player.targetX = currentPlayer.x;
+                    player.targetY = currentPlayer.y;
+                }
+                
+                console.log("Initialized current player position:", currentPlayer.x, currentPlayer.y);
+            }
+        }
+        
+        // Update the player list in the UI
         updatePlayerList();
+        
+        // Debug - log all players
+        console.log(`Total players: ${Object.keys(players).length}`);
     }
     
     // Remove a player from the list
@@ -3372,36 +3399,37 @@ document.addEventListener('DOMContentLoaded', () => {
     render();
 
     function drawPlayers() {
-        ctx.save();
-
-        // Make sure we have players to draw
+        // Debug - log drawing attempt
+        console.log("Drawing players, count:", Object.keys(players).length);
+        
+        // Define currentPlayer if it's not already defined
+        if (currentPlayerId && players[currentPlayerId] && !currentPlayer) {
+            currentPlayer = players[currentPlayerId];
+            console.log("Set currentPlayer reference in drawPlayers()");
+        }
+        
+        // Check if players object exists and has entries
         if (!players || Object.keys(players).length === 0) {
             console.warn("No players to draw!");
-            ctx.restore();
             return;
         }
+        
+        // Save the context state
+        ctx.save();
 
-        console.log("Drawing players:", Object.keys(players).length);
-
-        // Iterate over all players in the players object
+        // Draw each player
         Object.values(players).forEach(p => {
-            // Skip undefined players
-            if (!p) {
-                console.warn("Undefined player in players object");
-                return;
-            }
-            
-            // Skip players without position data
-            if (typeof p.x === 'undefined' || typeof p.y === 'undefined') {
-                console.warn("Player missing position data:", p.id);
+            // Skip undefined players or those with missing position data
+            if (!p || typeof p.x === 'undefined' || typeof p.y === 'undefined') {
+                console.warn("Player missing or has invalid position:", p);
                 return;
             }
             
             // Convert world coordinates to screen coordinates
             const screenX = (p.x - cameraX) * zoom + canvas.width / 2;
             const screenY = (p.y - cameraY) * zoom + canvas.height / 2;
-            
-            // Skip drawing if the player is off-screen
+
+            // Skip if off-screen (with expanded boundaries)
             if (screenX < -player.size * zoom * 2 || screenX > canvas.width + player.size * zoom * 2 ||
                 screenY < -player.size * zoom * 2 || screenY > canvas.height + player.size * zoom * 2) {
                 return;
