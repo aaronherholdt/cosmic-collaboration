@@ -557,6 +557,25 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Player list updated. Players:', Object.keys(players).length, 'Has host:', hasHost);
     }
     
+    // Switch between screens
+    function switchScreen(fromScreenId, toScreenId) {
+        const fromScreen = document.getElementById(fromScreenId);
+        const toScreen = document.getElementById(toScreenId);
+        try {
+            if (!fromScreen || !toScreen) {
+                console.error('Invalid screen elements:', { fromScreenId, toScreenId, fromScreen, toScreen });
+                return;
+            }
+            console.log('Switching screen for client', currentPlayerId, 'from', fromScreen.id, 'to', toScreen.id);
+            fromScreen.classList.remove('active');
+            toScreen.classList.add('active');
+            console.log('Screen switch completed. New active screen:', document.querySelector('.active')?.id);
+        } catch (error) {
+            console.error('Error in switchScreen:', error.message);
+        }
+    }
+
+
     // Start the game
     function startGame() {
         
@@ -582,12 +601,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Switch between screens
-    function switchScreen(fromScreen, toScreen) {
-        console.log('Switching screen for client', currentPlayerId, 'from', fromScreen.id, 'to', toScreen.id);
-        fromScreen.classList.remove('active');
-        toScreen.classList.add('active');
-    }
     
     // Initialize the Galactic Hub progress display
     function initializeHubProgress() {
