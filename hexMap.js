@@ -3179,9 +3179,19 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Start animation loop
     function animationLoop() {
-        if (player.isMoving) {
-            render();
-        }
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        drawBackground();
+        drawStarSystems();
+        drawStarBoundaries();
+        drawPlayers(); // Replace drawPlayer() with drawPlayers()
+        updateAllPingPositions();
+        updateMiniMap();
+
+        updatePlayerPosition();
+        enforceCameraLimits();
+        updatePanLimitIndicator();
+
         requestAnimationFrame(animationLoop);
     }
     animationLoop();
@@ -5310,5 +5320,57 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         // ... existing socket event listeners ...
+    }
+
+    function updatePlayerMovement() {
+        const currentPlayer = players[currentPlayerId];
+        
+        // Move current player towards target
+        if (currentPlayer && currentPlayer.isMoving) {
+            const dx = currentPlayer.targetX - currentPlayer.x;
+            const dy = currentPlayer.targetY - currentPlayer.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance > player.speed) {
+                currentPlayer.rotation = Math.atan2(dy, dx);
+                currentPlayer.x += Math.cos(currentPlayer.rotation) * player.speed;
+                currentPlayer.y += Math.sin(currentPlayer.rotation) * player.speed;
+            } else {
+                currentPlayer.x = currentPlayer.targetX;
+                currentPlayer.y = currentPlayer.targetY;
+                currentPlayer.isMoving = false;
+            }
+
+            // Update your position on the server
+            if (socket && socket.connected) {
+                socket.emit('updatePosition', { x: currentPlayer.x, y: currentPlayer.y });
+            }
+        }
+
+        // Update other players' positions (smooth interpolation)
+        Object.values(players).forEach(p => {
+            if (p.id !== currentPlayerId && p.isMoving) {
+                const dx = p.targetX - p.x;
+                const dy = p.targetY - p.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const speed = player.speed; // Use same speed as local player
+
+                if (distance > speed) {
+                    p.rotation = Math.atan2(dy, dx);
+                    p.x += Math.cos(p.rotation) * speed;
+                    p.y += Math.sin(p.rotation) * speed;
+                } else {
+                    p.x = p.targetX;
+                    p.y = p.targetY;
+                    p.isMoving = false;
+                }
+            }
+        });
+
+        // Camera follows ONLY the current player's rocket
+        if (currentPlayer) {
+            cameraX = currentPlayer.x;
+            cameraY = currentPlayer.y;
+        }
     }
 }); 
