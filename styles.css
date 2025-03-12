@@ -4,12 +4,59 @@
     box-sizing: border-box;
 }
 
+:root {
+    /* Base colors */
+    --primary-color: #4682B4;
+    --secondary-color: #FFD700;
+    --accent-color: #FF5252;
+    --bg-color: #000;
+    --bg-gradient-1: #000000;
+    --bg-gradient-2: #0a0a2a;
+    --text-color: #fff;
+    --text-highlight: #FFD700;
+    
+    /* Sizing */
+    --base-font-size: 16px;
+    --large-font-size: 24px;
+    --header-font-size: 32px;
+    --button-size: 32px;
+    --control-size: 44px;
+    --spacing-xs: 5px;
+    --spacing-sm: 10px;
+    --spacing-md: 20px;
+    --spacing-lg: 30px;
+    --spacing-xl: 40px;
+    
+    /* Animation */
+    --transition-speed: 0.3s;
+    
+    /* UI Elements */
+    --panel-width: 300px;
+    --panel-collapsed-width: 50px;
+    --panel-border-radius: 8px;
+    --input-height: 40px;
+    --button-border-radius: 4px;
+    --panel-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+    
+    /* Z-indices */
+    --z-background: 1;
+    --z-game: 10;
+    --z-ui: 100;
+    --z-overlay: 1000;
+    --z-modal: 2000;
+    --z-tooltip: 3000;
+    
+    /* Touch target adjustments */
+    --touch-target-min: 44px;
+}
+
 body {
-    background-color: #000;
-    color: #fff;
+    background-color: var(--bg-color);
+    color: var(--text-color);
     font-family: Arial, sans-serif;
     overflow: hidden;
     position: relative;
+    font-size: var(--base-font-size);
 }
 
 /* Screen Management */
@@ -33,13 +80,13 @@ body {
     align-items: center;
     justify-content: center;
     height: 100vh;
-    background: linear-gradient(to bottom, #000000, #0a0a2a);
+    background: linear-gradient(to bottom, var(--bg-gradient-1), var(--bg-gradient-2));
 }
 
 .login-container h1 {
-    font-size: 3rem;
-    margin-bottom: 2rem;
-    color: #FFD700;
+    font-size: var(--header-font-size);
+    margin-bottom: var(--spacing-lg);
+    color: var(--text-highlight);
     text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
 }
 
@@ -270,9 +317,6 @@ body {
     display: flex;
     flex-direction: column;
     height: 100vh;
-    width: 100vw;
-    overflow: hidden;
-    position: relative;
 }
 
 canvas {
@@ -1243,634 +1287,194 @@ button:hover {
 }
 
 /* Responsive Design Improvements */
-:root {
-    /* Layout variables */
-    --panel-width: 300px;
-    --panel-max-height: 60vh;
-    --button-size: 50px;
-    --border-radius: 8px;
-    --spacing-sm: 10px;
+@media (max-width: 1200px) {
+  :root {
+    --base-font-size: 15px;
+    --large-font-size: 22px;
+    --header-font-size: 28px;
+    --panel-width: 260px;
+    --spacing-lg: 25px;
+    --spacing-xl: 35px;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --base-font-size: 14px;
+    --large-font-size: 20px;
+    --header-font-size: 24px;
+    --button-size: 38px;
+    --control-size: 48px;
+    --panel-width: 220px;
     --spacing-md: 15px;
     --spacing-lg: 20px;
-    
-    /* Font sizes */
-    --font-size-sm: 0.8rem;
-    --font-size-md: 0.9rem;
-    --font-size-lg: 1rem;
-    --font-size-xl: 1.2rem;
-    --font-size-xxl: 2rem;
-    
-    /* Colors */
-    --color-primary: #4682B4;
-    --color-primary-light: rgba(70, 130, 180, 0.7);
-    --color-primary-dark: #2d5173;
-    --color-accent: #FFD700;
-    --color-accent-light: rgba(255, 215, 0, 0.5);
-    --color-background: rgba(10, 20, 40, 0.9);
-    --color-background-light: rgba(30, 40, 60, 0.7);
-    --color-text: #fff;
-    --color-text-muted: #aaa;
-    
-    /* Module colors */
-    --color-energy: rgba(255, 82, 82, 0.7);
-    --color-water: rgba(70, 130, 180, 0.7);
-    --color-organic: rgba(76, 175, 80, 0.7);
-    --color-mineral: rgba(255, 215, 0, 0.7);
-    
-    /* UI scale */
-    --ui-scale: 1;
-    
-    /* Hub module sizes */
-    --hub-module-size: 40px;
-    --hub-core-size: 50px;
-}
-
-/* Media queries to adjust variables */
-@media (max-width: 1200px) {
-    :root {
-        --ui-scale: 0.9;
-        --panel-width: 250px;
-    }
-}
-
-@media (max-width: 768px) {
-    :root {
-        --ui-scale: 0.8;
-        --panel-width: 90%;
-        --panel-max-height: 40vh;
-        --button-size: 45px;
-        --spacing-lg: 15px;
-        --spacing-md: 10px;
-        --font-size-xxl: 1.8rem;
-        --hub-module-size: calc(40px * var(--ui-scale));
-        --hub-core-size: calc(50px * var(--ui-scale));
-    }
-}
-
-@media (max-width: 576px) {
-    :root {
-        --ui-scale: 0.7;
-        --font-size-xxl: 1.5rem;
-        --font-size-xl: 1rem;
-        --font-size-lg: 0.9rem;
-        --spacing-lg: 10px;
-    }
-}
-
-/* Apply variables to elements */
-.hub-progress, .collaboration-panel {
-    width: var(--panel-width);
-    background-color: var(--color-background);
-    border: 2px solid var(--color-primary);
-    border-radius: var(--border-radius);
-    padding: var(--spacing-md);
-    color: var(--color-text);
-    max-height: var(--panel-max-height);
+    --spacing-xl: 30px;
+  }
+  
+  /* Enhance touch targets for mobile */
+  button, 
+  .control-button,
+  .rocket-option,
+  .player-item,
+  .inventory-item {
+    min-height: var(--touch-target-min);
+    min-width: var(--touch-target-min);
+  }
+  
+  /* Adjust panels for mobile view */
+  .hub-progress,
+  .collaboration-panel,
+  .inventory-display {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  
+  /* Allow scrolling on panels */
+  .player-contributions,
+  .team-contributions ul,
+  .inventory-items {
+    max-height: 200px;
     overflow-y: auto;
-}
-
-.hub-progress h3, .collaboration-panel h2 {
-    margin: 0 0 var(--spacing-md) 0;
-    font-size: var(--font-size-xl);
-    color: var(--color-accent);
-    text-align: center;
-}
-
-.hub-module {
-    width: var(--hub-module-size);
-    height: var(--hub-module-size);
-    border: 2px solid rgba(255, 255, 255, 0.5);
-}
-
-.hub-module[data-module="core"] {
-    width: var(--hub-core-size);
-    height: var(--hub-core-size);
-}
-
-.direction-btn, .control-button {
-    width: var(--button-size);
-    height: var(--button-size);
-    font-size: calc(var(--button-size) * 0.4);
-}
-
-.player-contribution {
-    background-color: var(--color-background-light);
-    border-radius: calc(var(--border-radius) * 0.5);
-    font-size: var(--font-size-sm);
-}
-
-/* Improved Responsive Login and Waiting Room - Horizontal Layout for Smaller Screens */
-@media (max-width: 768px) {
-    .login-container h1 {
-        font-size: 2rem;
-        margin-bottom: 1.5rem;
-    }
-    
-    .login-form {
-        width: 90%;
-        max-width: 450px;
-    }
-    
-    /* Keep rocket options horizontal */
-    .rocket-options {
-        display: flex;
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        justify-content: flex-start;
-        padding-bottom: 10px;
-        -webkit-overflow-scrolling: touch;
-    }
-    
-    .rocket-option {
-        flex: 0 0 150px;
-        width: 150px;
-        margin-right: 10px;
-        margin-bottom: 0;
-    }
-    
-    .rocket-option:last-child {
-        margin-right: 0;
-    }
-    
-    .waiting-room-container h1 {
-        font-size: 2rem;
-    }
-    
-    .player-list-container {
-        width: 90%;
-        max-width: 600px;
-    }
-    
-    /* Horizontal player list */
-    #playerList {
-        display: flex;
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        padding-bottom: 10px;
-        -webkit-overflow-scrolling: touch;
-    }
-    
-    #playerList li {
-        flex: 0 0 200px;
-        margin-right: 10px;
-        margin-bottom: 0;
-    }
-    
-    #playerList li:last-child {
-        margin-right: 0;
-    }
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 @media (max-width: 576px) {
-    .login-container h1 {
-        font-size: 1.8rem;
-    }
-    
-    .login-form {
-        width: 95%;
-    }
-    
-    /* More compact rocket options for very small screens */
-    .rocket-option {
-        flex: 0 0 120px;
-        width: 120px;
-        padding: 8px;
-    }
-    
-    .rocket-preview {
-        height: 40px;
-    }
-    
-    .rocket-option span {
-        font-size: 0.9rem;
-    }
-    
-    .rocket-specialty {
-        font-size: 0.7rem;
-    }
-    
-    .waiting-room-container {
-        padding: 1rem;
-    }
-    
-    .waiting-room-container h1 {
-        font-size: 1.6rem;
-        margin-bottom: 1.5rem;
-    }
-    
-    .player-list-container {
-        padding: 1rem;
-    }
-    
-    /* More compact player list items */
-    #playerList li {
-        flex: 0 0 160px;
-        padding: 8px;
-    }
-    
-    .player-name-item {
-        font-size: 0.9rem;
-    }
-    
-    #startGameBtn {
-        padding: 10px 20px;
-        font-size: 1rem;
-    }
-}
-
-/* Touch-friendly improvements */
-.touch-device .rocket-options,
-.touch-device #playerList {
-    scrollbar-width: none; /* Hide scrollbar for Firefox */
-    -ms-overflow-style: none; /* Hide scrollbar for IE/Edge */
-}
-
-.touch-device .rocket-options::-webkit-scrollbar,
-.touch-device #playerList::-webkit-scrollbar {
-    display: none; /* Hide scrollbar for Chrome/Safari */
-}
-
-/* Indicate scrollable areas */
-.touch-device .rocket-options::after,
-.touch-device #playerList::after {
-    content: "";
-    flex: 0 0 10px;
-}
-
-/* For very small height screens */
-@media (max-height: 500px) {
-    .login-container, .waiting-room-container {
-        padding: 10px;
-    }
-    
-    .login-container h1, .waiting-room-container h1 {
-        margin-bottom: 10px;
-        font-size: 1.5rem;
-    }
-    
-    #playerNameInput {
-        margin-bottom: 10px;
-        padding: 8px;
-    }
-    
-    .rocket-selection {
-        margin-bottom: 10px;
-        padding: 10px;
-    }
-    
-    .rocket-selection h3 {
-        margin-bottom: 8px;
-        font-size: 1rem;
-    }
-    
-    .player-list-container {
-        margin-bottom: 15px;
-        padding: 10px;
-    }
-    
-    .player-list-container h2 {
-        margin-bottom: 8px;
-        font-size: 1rem;
-    }
-}
-
-/* Add indicator for horizontal scroll */
-.horizontal-scroll-indicator {
-    display: none;
-    text-align: center;
-    color: #aaa;
-    font-size: 0.8rem;
-    margin-top: 5px;
-}
-
-@media (max-width: 768px) {
-    .horizontal-scroll-indicator {
-        display: block;
-    }
-}
-
-/* Improved Game UI Layout for Laptop/Tablet */
-
-/* Base adjustments for all screen sizes */
-.hub-progress, .collaboration-panel {
-    background-color: rgba(10, 20, 40, 0.85);
-    transition: all 0.3s ease;
-}
-
-/* Adjustments for medium screens (tablets and laptops) */
-@media (min-width: 768px) and (max-width: 1366px) {
-    /* Make panels more compact */
-    .hub-progress, .collaboration-panel {
-        width: 250px;
-        max-height: 450px;
-        overflow-y: auto;
-    }
-    
-    /* Add collapsible functionality */
-    .hub-progress {
-        transform: translateX(-180px);
-        padding-right: 30px;
-    }
-    
-    .collaboration-panel {
-        transform: translateX(180px);
-        padding-left: 30px;
-    }
-    
-    .hub-progress:hover, 
-    .hub-progress.expanded,
-    .collaboration-panel:hover,
-    .collaboration-panel.expanded {
-        transform: translateX(0);
-    }
-    
-    /* Reduce size of hub modules visualization */
-    .hub-visual-modules {
-        height: 100px;
-        transform: scale(0.9);
-    }
-    
-    /* Make progress bars thinner */
-    .resource-goal-progress {
-        height: 8px;
-    }
-    
-    /* Add expand/collapse indicators */
-    .hub-progress::after {
-        content: "►";
-        position: absolute;
-        right: 10px;
-        top: 50%;
-        transform: translateY(-50%);
-        color: #FFD700;
-    }
-    
-    .collaboration-panel::before {
-        content: "◄";
-        position: absolute;
-        left: 10px;
-        top: 50%;
-        transform: translateY(-50%);
-        color: #FFD700;
-    }
-    
-    .hub-progress:hover::after {
-        content: "◄";
-    }
-    
-    .collaboration-panel:hover::before {
-        content: "►";
-    }
-    
-    /* Adjust button positioning */
-    .controls-overlay {
-        bottom: 80px;
-        right: 15px;
-    }
-    
-    /* Add more transparency to make background more visible */
-    .player-contribution,
-    .team-contributions li {
-        background-color: rgba(30, 40, 60, 0.6);
-    }
-    
-    /* Compact the game boundary indicator */
-    .pan-limit-indicator {
-        width: auto;
-        min-width: 150px;
-    }
-}
-
-/* Make ping button more compact */
-@media (min-width: 768px) and (max-width: 1366px) {
-    .ping-controls {
-        bottom: 30px;
-    }
-    
-    .toggle-ping-btn {
-        padding: 6px 12px;
-        font-size: 0.8rem;
-    }
-}
-
-/* Additional functionality for expanded state */
-.panel-expanded {
-    transform: translateX(0) !important;
-}
-
-/* Improved Harvest Notification */
-.harvest-notification {
-    position: absolute;
-    background-color: rgba(0, 0, 0, 0.7);
-    color: white;
-    padding: 8px 15px;
-    border-radius: 20px;
-    font-size: 0.9rem;
-    font-weight: bold;
-    pointer-events: none;
-    z-index: 1000;
-    text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+  :root {
+    --base-font-size: 13px;
+    --large-font-size: 18px;
+    --header-font-size: 22px;
+    --button-size: 44px;
+    --control-size: 52px;
+    --spacing-sm: 8px;
+    --spacing-md: 12px;
+    --spacing-lg: 16px;
+  }
+  
+  /* Mobile-first layout - stack elements */
+  .login-form,
+  .player-list-container,
+  .game-interface {
+    width: 100%;
+  }
+  
+  /* Make buttons more prominent */
+  .button,
+  #joinGameBtn,
+  #startGameBtn,
+  .control-button {
+    width: 100%;
+    max-width: 280px;
+    padding: var(--spacing-md);
+    margin: var(--spacing-sm) 0;
+  }
+  
+  /* Adjust panels for tiny screens */
+  .hub-progress, 
+  .collaboration-panel,
+  .inventory-display {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    max-height: 40vh;
+    z-index: var(--z-overlay);
+    transform: translateY(100%);
+    transition: transform var(--transition-speed) ease;
+  }
+  
+  .hub-progress.visible,
+  .collaboration-panel.visible,
+  .inventory-display.visible {
     transform: translateY(0);
-    opacity: 0;
-    animation: float-message 2.5s ease-out forwards;
-    white-space: nowrap;
+  }
+  
+  /* Adjust mini-map size */
+  .mini-map {
+    width: 100px;
+    height: 80px;
+  }
 }
 
-.harvest-notification::before {
-    content: '';
+/* Landscape orientation adjustments for mobile */
+@media (max-height: 500px) and (orientation: landscape) {
+  .login-container, 
+  .waiting-room-container {
+    flex-direction: row;
+    justify-content: space-around;
+    padding: var(--spacing-md);
+  }
+  
+  .login-form,
+  .player-list-container {
+    width: 45%;
+  }
+  
+  .rocket-selection {
+    width: 45%;
+  }
+  
+  .rocket-options {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-around;
+  }
+  
+  /* Game panels in landscape */
+  .hub-progress,
+  .collaboration-panel {
+    max-height: 80vh;
+    width: 200px;
+  }
+}
+
+/* Classes for different device types */
+.mobile-device .control-button,
+.mobile-device button,
+.mobile-device .rocket-option {
+    min-height: var(--touch-target-min);
+    min-width: var(--touch-target-min);
+    padding: var(--spacing-sm);
+}
+
+.mobile-device .panel-toggle {
+    display: block;
     position: absolute;
-    left: -15px;
-    width: 10px;
-    height: 10px;
-    background-size: contain;
-    background-repeat: no-repeat;
+    right: var(--spacing-sm);
+    top: var(--spacing-sm);
+    z-index: var(--z-ui);
 }
 
-/* Resource-specific colors */
-.harvest-notification.energy {
-    border-left: 3px solid #FF5252;
+.mobile-device .panel-body {
+    max-height: 60vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
-.harvest-notification.water {
-    border-left: 3px solid #4682B4;
+.mobile-device .compact-panel {
+    padding: var(--spacing-sm);
 }
 
-.harvest-notification.organic {
-    border-left: 3px solid #4CAF50;
+.tablet-device .panel-toggle {
+    font-size: var(--large-font-size);
+    padding: var(--spacing-xs);
 }
 
-.harvest-notification.mineral {
-    border-left: 3px solid #FFD700;
+.tablet-device .tablet-nav-button {
+    min-width: 100px;
 }
 
-@keyframes float-message {
-    0% {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    10% {
-        opacity: 1;
-        transform: translateY(0);
-    }
-    80% {
-        opacity: 1;
-    }
-    100% {
-        opacity: 0;
-        transform: translateY(-30px);
-    }
+.tablet-device .tablet-selector {
+    min-width: 80px;
 }
 
-/* Touch controls */
-.direction-controls {
-    background-color: rgba(0, 0, 0, 0.2);
-    border-radius: 10px;
-    padding: 10px;
+.desktop-device .control-button {
+    transition: background-color var(--transition-speed) ease, 
+                transform var(--transition-speed) ease;
 }
 
-.direction-btn {
-    touch-action: manipulation;
-}
-
-.direction-btn:active {
-    background-color: rgba(70, 130, 180, 1) !important;
-    transform: scale(1.1);
-}
-
-.touch-indicator {
-    position: absolute;
-    pointer-events: none;
-    z-index: 1000;
-}
-
-/* Make sure buttons are large enough for touch */
-@media (max-width: 768px) {
-    .direction-btn {
-        width: 50px !important;
-        height: 50px !important;
-        font-size: 24px !important;
-    }
-    
-    .direction-controls {
-        gap: 8px !important;
-    }
-}
-
-/* For iPads specifically */
-@media only screen and (min-device-width: 768px) and (max-device-width: 1024px) {
-    .direction-btn {
-        width: 60px !important;
-        height: 60px !important;
-    }
-}
-
-/* Ensure game fills viewport */
-.game-interface {
-    width: 100vw;
-    height: 100vh;
-    overflow: hidden;
-    position: relative;
-}
-
-/* Touch-friendly buttons */
-button, .rocket-option, .player-item, .direction-btn {
-    min-width: 44px;
-    min-height: 44px;
-    touch-action: manipulation; /* Prevent double-tap zoom */
-}
-
-/* Directional controls */
-.direction-controls {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    z-index: 1000;
-    padding: 10px;
-    background: rgba(0, 0, 0, 0.5);
-    border-radius: 10px;
-}
-
-.direction-btn {
-    width: 50px;
-    height: 50px;
-    font-size: 20px;
-    border-radius: 50%;
-    background: rgba(70, 130, 180, 0.8);
-    border: none;
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.direction-btn:active {
-    background: rgba(100, 149, 237, 1);
-    transform: scale(1.1);
-}
-
-/* Controls overlay */
-.controls-overlay {
-    position: fixed;
-    bottom: 20px;
-    right: 80px; /* Adjusted to avoid overlap with directional controls */
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    z-index: 1000;
-}
-
-.control-button {
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    background: rgba(30, 58, 138, 0.8);
-    border: none;
-    color: white;
-    font-size: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-/* Responsive UI panels */
-@media (max-width: 768px) {
-    .hub-progress, .collaboration-panel {
-        width: 90%;
-        max-height: 40vh;
-        overflow-y: auto;
-        font-size: 0.9rem;
-    }
-    .hub-progress { left: 5px; top: 5px; }
-    .collaboration-panel { right: 5px; top: 5px; }
-    .direction-btn { width: 45px; height: 45px; font-size: 18px; }
-    .control-button { width: 45px; height: 45px; font-size: 18px; }
-}
-
-@media (min-width: 769px) and (max-width: 1366px) {
-    .hub-progress, .collaboration-panel {
-        width: 250px;
-        max-height: 50vh;
-    }
-}
-
-/* Touch indicator */
-.touch-indicator {
-    position: absolute;
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    border: 2px solid white;
-    background: rgba(255, 255, 255, 0.3);
-    transform: translate(-50%, -50%);
-    animation: pulse 1s ease-out;
-    pointer-events: none;
-}
-
-@keyframes pulse {
-    0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; }
-    100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+.desktop-device .control-button:hover {
+    transform: scale(1.05);
 } 
