@@ -64,7 +64,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize Socket.io connection
     function initializeSocketConnection() {
         // Connect to the server using the current URL
-        socket = io();
+        socket = io('https://cosmic-collaboration.onrender.com', {
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+        });
         
         // Display loading indicator
         const loadingMsg = document.createElement('div');
@@ -80,29 +84,38 @@ document.addEventListener('DOMContentLoaded', () => {
                     loadingMsg.parentNode.removeChild(loadingMsg);
                 }
             }, 2000);
-            
-            // Disable simulation when connected to real server
-            useSimulation = false;
-            
-            // Join the game with player info
-            socket.emit('joinGame', {
-                playerName: currentPlayerName,
-                rocketType: player.rocketType
-            });
+            updateStartButton(); // Call after connection to ensure UI reflects host status
+        });
+        
+        // Add game state handler
+        socket.on('gameState', (state) => {
+            console.log('Received game state:', state);
+            if (state.players[socket.id]) {
+                isHost = state.players[socket.id].isHost;
+                currentPlayerId = socket.id;
+                currentPlayerName = state.players[socket.id].name;
+                selectedRocketType = state.players[socket.id].rocketType;
+                updateStartButton();
+            }
+        });
+
+        socket.on('playerJoined', (data) => {
+            console.log('Player joined:', data);
+            if (data.id === socket.id) {
+                isHost = data.isHost;
+                currentPlayerId = data.id;
+                currentPlayerName = data.name;
+                selectedRocketType = data.rocketType;
+            }
+            addPlayer(data.id, data.name, data.isHost, data.rocketType);
+            updatePlayerList();
+            updateStartButton();
         });
 
         socket.on('connect_error', (error) => {
             console.error('Connection error:', error);
-            loadingMsg.textContent = 'Connection error! Using simulation mode.';
-            setTimeout(() => {
-                if (loadingMsg.parentNode) {
-                    loadingMsg.parentNode.removeChild(loadingMsg);
-                }
-            }, 3000);
-            
-            // Fall back to simulation mode
-            useSimulation = true;
-            simulateSocketConnection();
+            loadingMsg.textContent = 'Connection error! Please refresh.';
+            // Simulation fallback removed
         });
 
         // Handle game state from server
@@ -236,63 +249,32 @@ document.addEventListener('DOMContentLoaded', () => {
         updatePlayerList();
     }
     
-    // Simulate other players joining (for demo purposes)
-    function simulateOtherPlayersJoining() {
-        const botNames = [
-            'Alex', 'Bailey', 'Casey', 'Dana', 
-            'Elliot', 'Frankie', 'Jordan', 'Morgan',
-            'Riley', 'Sam', 'Taylor', 'Quinn'
-        ];
-        
-        const rocketTypes = ['red', 'blue', 'green', 'yellow'];
-        
-        // Shuffle the array to get random names
-        const shuffledNames = [...botNames].sort(() => Math.random() - 0.5);
-        
-        // Determine how many bots to add (2-4)
-        const numBots = Math.floor(Math.random() * 3) + 2;
-        
-        // Add bots with delays
-        for (let i = 0; i < numBots; i++) {
-            setTimeout(() => {
-                if (shuffledNames[i] && !Object.values(players).some(p => p.name === shuffledNames[i])) {
-                    // Assign a random rocket type different from the player's
-                    let botRocketType;
-                    do {
-                        botRocketType = rocketTypes[Math.floor(Math.random() * rocketTypes.length)];
-                    } while (botRocketType === selectedRocketType && rocketTypes.length > 1);
-                    
-                    const botId = 'bot_' + Math.random().toString(36).substr(2, 9);
-                    addPlayer(botId, shuffledNames[i], false, botRocketType);
-                }
-            }, (i + 1) * 1500); // Add a player every 1.5 seconds
-        }
-    }
     
     // Add a player to the list
     function addPlayer(id, name, isPlayerHost = false, rocketType) {
-        // Make sure the player doesn't already exist
-        if (!otherPlayers[id]) {
-            otherPlayers[id] = {
-                id: id,
-                name: name || 'Unknown Player',
-                x: 0,
-                y: 0,
-                targetX: 0,
-                targetY: 0,
-                rotation: 0,
-                isMoving: false,
-                isHost: isPlayerHost,
-                rocketType: rocketType || 'blue'
+        // Check if player already exists
+        if (!players.some(p => p.id === id)) {
+            // Add new player with consistent structure
+            const newPlayer = {
+                id: id, 
+                name: name, 
+                isHost: isPlayerHost, 
+                rocketType: rocketType,
+                x: 0, 
+                y: 0, 
+                targetX: 0, 
+                targetY: 0, 
+                rotation: 0, 
+                isMoving: false
             };
-            console.log(`Added player: ${name} (${id})`);
+            
+            players.push(newPlayer);
+            console.log(`Player added: ${name} (${id}), Host: ${isPlayerHost}`);
         } else {
-            console.log(`Player ${name} (${id}) already exists, updating properties`);
-            // Update properties of existing player
-            otherPlayers[id].name = name;
-            otherPlayers[id].isHost = isPlayerHost;
-            otherPlayers[id].rocketType = rocketType || otherPlayers[id].rocketType;
+            console.log(`Player ${name} (${id}) already exists, not adding duplicate`);
         }
+        
+        updatePlayerList();
     }
     
     // Remove a player
@@ -349,31 +331,34 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Start the game
     function startGame() {
+        if (isHost && socket && socket.connected) {
+            socket.emit('startGame');
+        }
+        // Simulation mode removed
+    }
+
+    // Add socket event listener for game start
+    if (socket) {
+        socket.on('startGame', () => {
+            handleGameStart();
+        });
+    }
+
+    function handleGameStart() {
         gameStarted = true;
         switchScreen('waitingRoomScreen', 'gameScreen');
-        
-        // Initialize the game components
+        initializeGameComponents();
+    }
+
+    function initializeGameComponents() {
         initializeGalaxy();
         initializeHubProgress();
         initializeCosmicNexusCore();
         enhanceResponsiveLayout();
-        
-        // Always connect to real server and fall back to simulation if needed
-        initializeSocketConnection();
-        
-        // Comment out direct simulation calls
-        // simulateSocketConnection();
-        // simulateOtherPlayersJoining();
-        
-        // Initialize player position
         initializePlayerPosition();
-        
-        // Setup input handlers
         setupControlButtons();
         setupTabletLayout();
         setupTouchControls();
-        
-        // Start the game loop
         animationLoop();
     }
     
@@ -557,23 +542,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Function to simulate broadcasting contributions to other players
-    function simulateBroadcastContribution(playerId, resourceType, amount) {
-        // In a real implementation, this would use Socket.io to broadcast to all players
-        // For now, we'll simulate other players contributing as well
-        
-        // Simulate a delay for network transmission
-        setTimeout(() => {
-            // Simulate other players seeing the update
-            highlightPlayerContribution(playerId);
-            
-            // Occasionally simulate other players contributing too
-            if (Math.random() < 0.3) {
-                simulateOtherPlayerContribution();
-            }
-        }, 500 + Math.random() * 1000);
-    }
-    
     // Function to highlight a player's contribution
     function highlightPlayerContribution(playerId) {
         const contributionElement = document.getElementById(`contribution-${playerId}`);
@@ -608,7 +576,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
             
             // Update displays
-            updateHubProgress();
+        updateHubProgress();
         updatePlayerContributionsDisplay();
         updateCollaborationPanel();
         
@@ -5286,5 +5254,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 y: player.targetY
             });
         }
+    }
+
+    function updateStartButton() {
+        if (isHost) {
+            startGameBtn.disabled = false;
+            startGameBtn.textContent = 'Start Game';
+        } else {
+            startGameBtn.disabled = true;
+            startGameBtn.textContent = 'Waiting for host to start...';
+        }
+    }
+
+    // Add this to the socket event listeners section
+    if (socket) {
+        // ... existing socket event listeners ...
+        
+        socket.on('newHost', (data) => {
+            console.log(`New host assigned: ${data.name}`);
+            if (data.id === socket.id) {
+                isHost = true;
+                showSystemMessage('You are now the host!');
+            }
+            updateStartButton();
+        });
+        
+        // ... existing socket event listeners ...
     }
 }); 
