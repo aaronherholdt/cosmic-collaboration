@@ -81,20 +81,117 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         socket.on('playerJoined', (player) => {
+            // Add the new player to our local list
             addPlayer(player.id, player.name, player.isHost, player.rocketType);
+            
             // If the player already has a position, update it
             if (player.position) {
                 updateOtherPlayerPosition(player.id, player.position, player.direction, player.isMoving);
             }
             
+            // Show a welcome message
             showSystemMessage(`${player.name} has joined the game!`, 3000);
+            
+            // If this is the current player and they're the host, enable start button
+            if (player.id === currentPlayerId && player.isHost) {
+                isHost = true;
+                startGameBtn.disabled = false;
+                startGameBtn.textContent = 'Start Game';
+                console.log('Host status confirmed:', isHost);
+            }
+        });
+        
+        // Add missing handler for playerList event
+        socket.on('playerList', (playersList) => {
+            // Clear existing players first to avoid duplicates
+            Object.keys(players).forEach(id => {
+                if (id !== currentPlayerId) {
+                    delete players[id];
+                }
+            });
+            
+            // Add all players from the list
+            playersList.forEach(player => {
+                // Skip adding the current player again
+                if (player.id !== currentPlayerId) {
+                    addPlayer(player.id, player.name, player.isHost, player.rocketType);
+                } else {
+                    // Update our own player's host status
+                    players[currentPlayerId].isHost = player.isHost;
+                    isHost = player.isHost;
+                    
+                    // If current player is host, enable the start button
+                    if (isHost) {
+                        startGameBtn.disabled = false;
+                        startGameBtn.textContent = 'Start Game';
+                        console.log('You are the host! Start button enabled.');
+                    }
+                }
+            });
+            
+            // Update the UI
+            updatePlayerList();
+        });
+        
+        socket.on('fullGameState', (data) => {
+            // Handle full game state information
+            if (data.isGameStarted) {
+                isGameStarted = true;
+            }
+            
+            // Process player information
+            data.players.forEach(player => {
+                if (player.id !== currentPlayerId) {
+                    addPlayer(player.id, player.name, player.isHost, player.rocketType);
+                    updateOtherPlayerPosition(player.id, player.position, player.direction, player.isMoving);
+                } else {
+                    // Update our own player's host status
+                    players[currentPlayerId].isHost = player.isHost;
+                    isHost = player.isHost;
+                    
+                    // If current player is host, enable the start button
+                    if (isHost) {
+                        startGameBtn.disabled = false;
+                        startGameBtn.textContent = 'Start Game';
+                    }
+                }
+            });
+            
+            // Update hub progress if available
+            if (data.hubProgress) {
+                Object.keys(data.hubProgress).forEach(resourceType => {
+                    if (hubGoals[resourceType]) {
+                        hubGoals[resourceType].current = data.hubProgress[resourceType].current;
+                    }
+                });
+                updateHubProgress();
+            }
+            
+            // If game is already started, move to game screen
+            if (data.isGameStarted) {
+                startGame();
+            }
+            
+            // Update the UI
+            updatePlayerList();
         });
         
         socket.on('playerLeft', (data) => {
             if (players[data.id]) {
                 const playerName = players[data.id].name;
+                const wasHost = players[data.id].isHost;
+                
+                // Remove player from local list
                 removePlayer(data.id);
+                
+                // Show message about player leaving
                 showSystemMessage(`${playerName} has left the game`, 3000);
+                
+                // If the host left, let users know we're waiting for a new host assignment
+                if (wasHost) {
+                    showSystemMessage('Host left the game. Assigning a new host...', 3000);
+                    console.log('Host disconnected, waiting for new host assignment');
+                }
             }
         });
         
@@ -170,23 +267,54 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         socket.on('newHost', (data) => {
-            // Update host status for the new host
+            console.log('New host assigned:', data.id);
+            
+            // First clear all host statuses
+            Object.values(players).forEach(p => p.isHost = false);
+            
             if (players[data.id]) {
-                Object.values(players).forEach(p => p.isHost = false);
+                // Set the new host
                 players[data.id].isHost = true;
                 
-                // If current player is the new host, update local state
+                // If current player is the new host, update local state and UI
                 if (data.id === currentPlayerId) {
                     isHost = true;
                     startGameBtn.disabled = false;
                     startGameBtn.textContent = 'Start Game';
-                    showSystemMessage('You are now the host!', 3000);
+                    
+                    // Show message and highlight effect for the new host
+                    showSystemMessage('You are now the host! You can start the game when ready.', 5000);
+                    
+                    // Flash the start button to draw attention
+                    const flashButton = () => {
+                        startGameBtn.classList.add('button-highlight');
+                        setTimeout(() => {
+                            startGameBtn.classList.remove('button-highlight');
+                        }, 500);
+                    };
+                    
+                    // Flash a few times to draw attention
+                    flashButton();
+                    setTimeout(flashButton, 1000);
+                    setTimeout(flashButton, 2000);
+                    
+                    console.log('This player is now the host!');
                 } else {
+                    // Message for other players about the new host
                     showSystemMessage(`${players[data.id].name} is now the host`, 3000);
+                    console.log(`New host assigned: ${players[data.id].name}`);
                 }
                 
                 // Update the player list in the UI
                 updatePlayerList();
+            } else {
+                console.error('New host not found in player list:', data.id);
+                
+                // Attempt to recover by requesting updated game state
+                setTimeout(() => {
+                    socket.emit('requestGameState');
+                    console.log('Requested updated game state after host error');
+                }, 1000);
             }
         });
         
@@ -285,10 +413,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
+        // Store current player name
         currentPlayerName = name;
+        console.log(`Joining game as: ${currentPlayerName} with rocket: ${selectedRocketType}`);
         
-        // Add player to the local list (server will assign the actual ID)
-        // The server will assign host status
+        // Add our player locally - host status will be determined by server
         addPlayer(currentPlayerId, name, false, selectedRocketType);
         
         // Emit join event to server
@@ -300,9 +429,17 @@ document.addEventListener('DOMContentLoaded', () => {
         // Switch to waiting room screen
         switchScreen(loginScreen, waitingRoomScreen);
         
-        // Host status and start button will be handled via server response
-            startGameBtn.disabled = true;
-            startGameBtn.textContent = 'Waiting for host to start...';
+        // Start button is disabled until server confirms host status
+        startGameBtn.disabled = true;
+        startGameBtn.textContent = 'Waiting for host to start...';
+        
+        // The playerList event from server will set correct host status and enable button if needed
+        // (This event is already handled in initializeSocketConnection)
+        
+        console.log('Waiting for player list and host confirmation from server...');
+        
+        // Request the current game state just to be sure
+        socket.emit('requestGameState');
     }
     
     // Add a player to the list
@@ -326,8 +463,23 @@ document.addEventListener('DOMContentLoaded', () => {
             contributions: { energy: 0, water: 0, organic: 0, mineral: 0 } // Track contributions
         };
         
+        // If this is the current player, update the global host status
+        if (id === currentPlayerId) {
+            isHost = isPlayerHost;
+            
+            // Update the start button based on host status
+            if (isHost) {
+                startGameBtn.disabled = false;
+                startGameBtn.textContent = 'Start Game';
+            } else {
+                startGameBtn.disabled = true;
+                startGameBtn.textContent = 'Waiting for host to start...';
+            }
+        }
+        
         // Update the UI
         updatePlayerList();
+        console.log(`Player added: ${name} (ID: ${id}, Host: ${isPlayerHost}, Current player: ${id === currentPlayerId})`);
     }
     
     // Remove a player
@@ -340,8 +492,13 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Update the player list in the UI
     function updatePlayerList() {
+        // Clear the current list
         playerList.innerHTML = '';
         
+        // Track if we have a host
+        let hasHost = false;
+        
+        // Add each player to the list
         Object.values(players).forEach(player => {
             const li = document.createElement('li');
             
@@ -359,11 +516,14 @@ document.addEventListener('DOMContentLoaded', () => {
             playerName.className = 'player-name-item';
             playerName.textContent = player.name;
             
+            // Mark the host
             if (player.isHost) {
                 playerName.textContent += ' (Host)';
                 playerName.style.color = '#FFD700';
+                hasHost = true;
             }
             
+            // Highlight current player
             if (player.id === currentPlayerId) {
                 playerName.style.fontWeight = 'bold';
             }
@@ -380,6 +540,9 @@ document.addEventListener('DOMContentLoaded', () => {
             li.appendChild(playerInfo);
             playerList.appendChild(li);
         });
+        
+        // Log the current player list for debugging
+        console.log('Player list updated. Players:', Object.keys(players).length, 'Has host:', hasHost);
     }
     
     // Start the game
