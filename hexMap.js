@@ -281,94 +281,68 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Please enter a name with at least 2 characters');
             return;
         }
-
+    
         currentPlayerName = name;
-
+    
         if (socket && socket.connected) {
             currentPlayerId = socket.id;
-            
-            // Generate random position
-            const posX = galaxyCenterX + (Math.random() - 0.5) * galaxyRadius * 0.5;
-            const posY = galaxyCenterY + (Math.random() - 0.5) * galaxyRadius * 0.5;
-
-            // Initialize player data
             players[currentPlayerId] = {
                 id: currentPlayerId,
                 name: name,
-                isHost: false, // Server will set this
+                isHost: false,
                 rocketType: selectedRocketType,
-                x: posX,
-                y: posY,
-                targetX: posX, // Set target to match initial position
-                targetY: posY,
+                x: 0, // Initial placeholder, will be set by initializePlayerPosition
+                y: 0,
+                targetX: 0,
+                targetY: 0,
                 rotation: 0,
                 isMoving: false,
                 visible: true,
-                speed: 8, // Increased for faster movement
-                size: 30,
+                speed: 5,
+                size: 30, // Ensure size is defined
                 fuel: 100,
                 maxFuel: 100,
                 inventory: {},
                 chosenResource: null,
                 currentStar: null
             };
-
-            // Set currentPlayer reference
             currentPlayer = players[currentPlayerId];
-
-            console.log(`Joining game with name: ${name}, rocket: ${selectedRocketType}`);
-            console.log("Player initialized at position:", currentPlayer.x, currentPlayer.y);
-
-            // Emit join game event to server
+    
             socket.emit('joinGame', {
                 playerName: name,
                 rocketType: selectedRocketType,
                 position: { x: currentPlayer.x, y: currentPlayer.y }
             });
-
+    
             switchScreen('loginScreen', 'waitingRoomScreen');
         } else {
             // Offline mode
             currentPlayerId = 'local-' + Date.now();
-            
-            // Generate random position
-            const posX = galaxyCenterX + (Math.random() - 0.5) * galaxyRadius * 0.5;
-            const posY = galaxyCenterY + (Math.random() - 0.5) * galaxyRadius * 0.5;
-            
             players[currentPlayerId] = {
                 id: currentPlayerId,
                 name: name,
                 isHost: true,
                 rocketType: selectedRocketType,
-                x: posX,
-                y: posY,
-                targetX: posX, // Set target to match initial position
-                targetY: posY,
+                x: 0, // Initial placeholder
+                y: 0,
+                targetX: 0,
+                targetY: 0,
                 rotation: 0,
                 isMoving: false,
                 visible: true,
-                speed: 8, // Increased for faster movement
-                size: 30,
+                speed: 5,
+                size: 30, // Ensure size is defined
                 fuel: 100,
                 maxFuel: 100,
                 inventory: {},
                 chosenResource: null,
                 currentStar: null
             };
-
             currentPlayer = players[currentPlayerId];
-
-            console.log(`Joining offline game with name: ${name}, rocket: ${selectedRocketType}`);
+    
             switchScreen('loginScreen', 'waitingRoomScreen');
             simulateSocketConnection();
         }
-
-        // Force redraw after join
-        setTimeout(() => {
-            console.log("Forcing redraw after join...");
-            if (typeof drawPlayers === 'function') drawPlayers();
-            console.log("Current player after redraw:", currentPlayer);
-        }, 1000);
     }
     
     
@@ -3338,79 +3312,74 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     // Initialize player position in empty space
     function initializePlayerPosition() {
-        // Try to find a safe position for the player
+        if (!currentPlayer) {
+            console.warn("currentPlayer not defined in initializePlayerPosition");
+            return;
+        }
+    
         let safePositionFound = false;
         let attempts = 0;
-        const maxAttempts = 100; // Prevent infinite loop
-        
+        const maxAttempts = 100;
+    
         while (!safePositionFound && attempts < maxAttempts) {
             // Generate a random position within a reasonable distance from center
             const angle = Math.random() * Math.PI * 2;
-            const distance = Math.random() * galaxyRadius * 0.5; // Half the galaxy radius
-            
+            const distance = Math.random() * galaxyRadius * 0.5;
             const testX = galaxyCenterX + Math.cos(angle) * distance;
             const testY = galaxyCenterY + Math.sin(angle) * distance;
-            
+    
             // Check if this position is inside any star
             let insideStar = false;
             for (const star of starSystems) {
                 const dx = testX - star.x;
                 const dy = testY - star.y;
                 const distanceToStar = Math.sqrt(dx * dx + dy * dy);
-                
-                // Add a buffer zone around the star
-                if (distanceToStar <= star.radius + player.size) {
+                // Use currentPlayer.size instead of player.size
+                if (distanceToStar <= star.radius + currentPlayer.size) {
                     insideStar = true;
                     break;
                 }
             }
-            
+    
             // If not inside any star, use this position
             if (!insideStar) {
-                player.x = testX;
-                player.y = testY;
-                player.targetX = testX;
-                player.targetY = testY;
+                currentPlayer.x = testX;
+                currentPlayer.y = testY;
+                currentPlayer.targetX = testX;
+                currentPlayer.targetY = testY;
                 safePositionFound = true;
-                
+    
                 // Center camera on player
-                cameraX = player.x;
-                cameraY = player.y;
-                
-                // Important - update the players object with the current player's position
-                if (currentPlayerId && players[currentPlayerId]) {
-                    players[currentPlayerId].x = player.x;
-                    players[currentPlayerId].y = player.y;
-                    players[currentPlayerId].targetX = player.targetX;
-                    players[currentPlayerId].targetY = player.targetY;
-                    players[currentPlayerId].visible = true; // Ensure visibility
-                }
+                cameraX = currentPlayer.x;
+                cameraY = currentPlayer.y;
+    
+                // No need to update players[currentPlayerId] separately since currentPlayer is a reference to it
+                currentPlayer.visible = true; // Ensure visibility
             }
-            
+    
             attempts++;
         }
-        
-        // Fallback if no safe position found after max attempts
+    
+        // Fallback if no safe position found
         if (!safePositionFound) {
-            // Place player at a fixed safe distance from the center
-            player.x = galaxyRadius * 0.75;
-            player.y = 0;
-            player.targetX = player.x;
-            player.targetY = player.y;
-            
+            currentPlayer.x = galaxyRadius * 0.75;
+            currentPlayer.y = 0;
+            currentPlayer.targetX = currentPlayer.x;
+            currentPlayer.targetY = currentPlayer.y;
+    
             // Center camera on player
-            cameraX = player.x;
-            cameraY = player.y;
-            
-            // Important - update the players object with the current player's position
-            if (currentPlayerId && players[currentPlayerId]) {
-                players[currentPlayerId].x = player.x;
-                players[currentPlayerId].y = player.y;
-                players[currentPlayerId].targetX = player.targetX;
-                players[currentPlayerId].targetY = player.targetY;
-                players[currentPlayerId].visible = true; // Ensure visibility
-            }
+            cameraX = currentPlayer.x;
+            cameraY = currentPlayer.y;
+    
+            currentPlayer.visible = true; // Ensure visibility
         }
+    
+        // Sync position with server if connected
+        if (socket && socket.connected) {
+            socket.emit('updatePosition', { x: currentPlayer.x, y: currentPlayer.y });
+        }
+    
+        console.log("Player position initialized:", currentPlayer.x, currentPlayer.y);
     }
     
     // Initialize player after galaxy is created
