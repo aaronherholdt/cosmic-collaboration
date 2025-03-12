@@ -218,6 +218,7 @@ io.on('connection', (socket) => {
                     id: newHostId,
                     name: gameState.players[newHostId].name
                 });
+                io.emit('gameState', gameState); // Ensure all clients get updated state
             }
         }
     });
