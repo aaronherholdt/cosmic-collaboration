@@ -3,234 +3,344 @@ const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
 
-// Initialize Express app
+// Deployment URL
+const DEPLOYMENT_URL = 'https://cosmic-collaboration.onrender.com';
+
+// Initialize express app
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
+const io = socketIo(server, {
+    cors: {
+        origin: ["http://localhost:3000", DEPLOYMENT_URL, "*"],
+        methods: ["GET", "POST"],
+        credentials: true
+    },
+    pingInterval: 2000, // More frequent ping to keep connections alive
+    pingTimeout: 5000   // Faster timeout detection
+});
 
-// Set proper MIME types
-express.static.mime.define({'text/css': ['css']});
-express.static.mime.define({'application/javascript': ['js']});
+// Serve static files
+app.use(express.static(path.join(__dirname, '/')));
 
-// Serve static files with correct MIME types
-app.use(express.static(path.join(__dirname, '/'), {
-  setHeaders: (res, path) => {
-    if (path.endsWith('.css')) {
-      res.setHeader('Content-Type', 'text/css');
-    } else if (path.endsWith('.js')) {
-      res.setHeader('Content-Type', 'application/javascript');
+// Add a route for the root path that displays connection info
+app.get('/', (req, res, next) => {
+    // If there's an index.html, this will pass to the static middleware
+    if (path.join(__dirname, '/index.html')) {
+        next();
+    } else {
+        res.send(`
+            <h1>Hexagonal Harvest - Cosmic Collaboration</h1>
+            <p>Server is running. Connect to: ${DEPLOYMENT_URL}</p>
+        `);
     }
-  }
-}));
+});
 
-// Single game state
+// Core game state - keeping only essential data
 const gameState = {
     players: {},
-    starSystems: {},
+    isGameStarted: false,
     hubProgress: {
-        energy: { required: 100, current: 0 },
-        crystal: { required: 100, current: 0 },
-        metal: { required: 100, current: 0 },
-        gas: { required: 100, current: 0 },
-        exotic: { required: 100, current: 0 }
+        energy: { current: 0, max: 1000 },
+        water: { current: 0, max: 1000 },
+        organic: { current: 0, max: 1000 },
+        mineral: { current: 0, max: 1000 }
     },
-    nexusShards: []
+    lastUpdateTime: Date.now() // Track last state update
 };
 
-// Socket.IO connection handling
+// Enhanced player position tracking
+// Store position history for interpolation if needed
+const MAX_POSITION_HISTORY = 5;
+const MOVEMENT_THRESHOLD = 0.5; // Minimum distance to register movement
+
+// Helper function to calculate distance between two points
+function calculateDistance(pos1, pos2) {
+    return Math.sqrt(Math.pow(pos1.x - pos2.x, 2) + Math.pow(pos1.y - pos2.y, 2));
+}
+
+// WebSocket connection handling
 io.on('connection', (socket) => {
-    console.log(`User connected: ${socket.id}`);
-    
-    // Player joins game
-    socket.on('joinGame', (data) => {
-        const { playerName, rocketType } = data;
+    console.log(`New connection: ${socket.id}`);
+
+    // Send connection confirmation with server info
+    socket.emit('connectionEstablished', {
+        serverId: socket.id,
+        serverUrl: DEPLOYMENT_URL,
+        timestamp: Date.now()
+    });
+
+    // Core player join functionality
+    socket.on('playerJoin', ({ playerName, rocketType }) => {
+        console.log(`Player joined: ${playerName} with rocket: ${rocketType}`);
         
-        // Add player to game
-        const isHost = Object.keys(gameState.players).length === 0;
+        // Add player to game state - enhanced player object with movement data
         gameState.players[socket.id] = {
             id: socket.id,
             name: playerName,
             rocketType: rocketType,
-            isHost: isHost,
             position: { x: 0, y: 0 },
-            inventory: {},
-            currentStar: null
+            previousPositions: [], // Store position history
+            velocity: { x: 0, y: 0 },
+            direction: 0, // Direction in radians
+            lastMoveTime: Date.now(),
+            isMoving: false,
+            isHost: Object.keys(gameState.players).length === 0
         };
-        
-        // Notify everyone about the new player
+
+        // Broadcast new player to all connected clients
         io.emit('playerJoined', {
             id: socket.id,
             name: playerName,
+            isHost: gameState.players[socket.id].isHost,
             rocketType: rocketType,
-            isHost: isHost
+            position: { x: 0, y: 0 },
+            direction: 0
         });
-        
-        // Send current game state to the new player
-        socket.emit('gameState', gameState);
-    });
-    
-    // Player position update
-    socket.on('updatePosition', (position) => {
-        if (!gameState.players[socket.id]) return;
-        
-        gameState.players[socket.id].position = position;
-        socket.broadcast.emit('playerMoved', {
-            id: socket.id,
-            position: position
-        });
-    });
-    
-    // Resource harvested
-    socket.on('resourceHarvested', (data) => {
-        if (!gameState.players[socket.id]) return;
-        
-        const { starId, resourceType, amount } = data;
-        
-        // Update game state
-        if (!gameState.starSystems[starId]) {
-            gameState.starSystems[starId] = { resources: {} };
+
+        // Send current player list to the new player
+        socket.emit('playerList', Object.values(gameState.players).map(player => ({
+            id: player.id,
+            name: player.name,
+            isHost: player.isHost,
+            rocketType: player.rocketType,
+            position: player.position,
+            direction: player.direction,
+            isMoving: player.isMoving
+        })));
+
+        // If game has already started, update the new player
+        if (gameState.isGameStarted) {
+            socket.emit('gameStarted');
+            socket.emit('updateHubProgress', gameState.hubProgress);
         }
-        
-        if (!gameState.starSystems[starId].resources[resourceType]) {
-            gameState.starSystems[starId].resources[resourceType] = 0;
-        }
-        
-        gameState.starSystems[starId].resources[resourceType] += amount;
-        
-        // Broadcast to other players
-        socket.broadcast.emit('resourceHarvested', {
-            playerId: socket.id,
-            starId: starId,
-            playerName: gameState.players[socket.id].name,
-            resourceType: resourceType,
-            amount: amount
-        });
     });
-    
-    // Hub contribution
-    socket.on('hubContribution', (data) => {
-        if (!gameState.players[socket.id]) return;
+
+    // Game start handler
+    socket.on('startGame', () => {
+        if (gameState.players[socket.id] && gameState.players[socket.id].isHost) {
+            gameState.isGameStarted = true;
+            io.emit('gameStarted');
+        }
+    });
+
+    // Enhanced player position synchronization
+    socket.on('playerMove', (moveData) => {
+        const player = gameState.players[socket.id];
+        if (!player) return;
         
-        const { resourceType, amount } = data;
+        const currentTime = Date.now();
+        const { position, velocity, direction } = moveData;
         
-        // Update hub progress
-        if (gameState.hubProgress[resourceType]) {
-            gameState.hubProgress[resourceType].current += amount;
-            
-            // Check if module is complete
-            if (gameState.hubProgress[resourceType].current >= gameState.hubProgress[resourceType].required) {
-                io.emit('moduleCompleted', resourceType);
-            }
-            
-            // Check if hub is complete
-            let hubComplete = true;
-            for (const resource in gameState.hubProgress) {
-                if (gameState.hubProgress[resource].current < gameState.hubProgress[resource].required) {
-                    hubComplete = false;
-                    break;
+        // Store previous position for history
+        if (player.position.x !== 0 || player.position.y !== 0) {
+            // Only store if it's a significant enough movement
+            if (calculateDistance(player.position, position) > MOVEMENT_THRESHOLD) {
+                player.previousPositions.unshift({
+                    position: {...player.position},
+                    timestamp: player.lastMoveTime
+                });
+                
+                // Limit history size
+                if (player.previousPositions.length > MAX_POSITION_HISTORY) {
+                    player.previousPositions.pop();
                 }
             }
-            
-            if (hubComplete) {
-                io.emit('hubCompleted');
-            }
+        }
+        
+        // Update player position and movement data
+        player.position = position;
+        player.velocity = velocity || { x: 0, y: 0 };
+        player.direction = direction || 0;
+        player.lastMoveTime = currentTime;
+        player.isMoving = velocity && (Math.abs(velocity.x) > 0.01 || Math.abs(velocity.y) > 0.01);
+        
+        // Broadcast updated position to ALL players (not just other players)
+        // This ensures everyone has the most current data
+        io.emit('playerMoved', {
+            id: socket.id,
+            position: player.position,
+            velocity: player.velocity,
+            direction: player.direction,
+            timestamp: currentTime,
+            isMoving: player.isMoving
+        });
+    });
+
+    // Player stopped moving event
+    socket.on('playerStopMove', () => {
+        const player = gameState.players[socket.id];
+        if (!player) return;
+        
+        player.isMoving = false;
+        player.velocity = { x: 0, y: 0 };
+        
+        io.emit('playerStoppedMoving', {
+            id: socket.id,
+            position: player.position,
+            timestamp: Date.now()
+        });
+    });
+
+    // Request for full game state - useful when a client needs to sync
+    socket.on('requestGameState', () => {
+        socket.emit('fullGameState', {
+            players: Object.values(gameState.players).map(player => ({
+                id: player.id,
+                name: player.name,
+                position: player.position,
+                velocity: player.velocity,
+                direction: player.direction,
+                isMoving: player.isMoving,
+                rocketType: player.rocketType,
+                isHost: player.isHost
+            })),
+            hubProgress: gameState.hubProgress,
+            isGameStarted: gameState.isGameStarted
+        });
+    });
+
+    // Connection status check
+    socket.on('pingServer', (callback) => {
+        const timestamp = Date.now();
+        if (typeof callback === 'function') {
+            callback({
+                status: 'connected',
+                timestamp: timestamp,
+                playerCount: Object.keys(gameState.players).length
+            });
+        } else {
+            socket.emit('pongServer', {
+                status: 'connected',
+                timestamp: timestamp,
+                playerCount: Object.keys(gameState.players).length
+            });
+        }
+    });
+
+    // Essential resource contribution functionality
+    socket.on('contributeToHub', ({ resourceType, amount }) => {
+        if (!gameState.players[socket.id]) return;
+        
+        // Update hub progress
+        gameState.hubProgress[resourceType].current += amount;
+        
+        // Cap at maximum
+        if (gameState.hubProgress[resourceType].current > gameState.hubProgress[resourceType].max) {
+            gameState.hubProgress[resourceType].current = gameState.hubProgress[resourceType].max;
         }
         
         // Broadcast contribution to all players
         io.emit('hubContribution', {
             playerId: socket.id,
             playerName: gameState.players[socket.id].name,
-            resourceType: resourceType,
-            amount: amount,
-            newTotal: gameState.hubProgress[resourceType].current
+            resourceType,
+            amount,
+            hubProgress: gameState.hubProgress
         });
+        
+        // Check if hub is complete
+        const isHubComplete = Object.keys(gameState.hubProgress).every(
+            resource => gameState.hubProgress[resource].current >= gameState.hubProgress[resource].max
+        );
+        
+        if (isHubComplete) {
+            io.emit('hubComplete');
+        }
     });
-    
-    // Nexus shard activation
-    socket.on('activateNexusShard', (data) => {
+
+    // Basic ping system for player coordination
+    socket.on('addPing', ({ x, y, message }) => {
         if (!gameState.players[socket.id]) return;
         
-        const { starId, resourceType } = data;
-        
-        // Add to activated shards
-        gameState.nexusShards.push({
-            starId: starId,
-            activatedBy: socket.id,
-            resourceType: resourceType,
-            timestamp: Date.now()
-        });
-        
-        // Broadcast activation to all players
-        io.emit('nexusShardActivated', {
-            playerId: socket.id,
-            playerName: gameState.players[socket.id].name,
-            starId: starId,
-            resourceType: resourceType,
-            totalActivated: gameState.nexusShards.length
-        });
-    });
-    
-    // Player ping
-    socket.on('sendPing', (data) => {
-        if (!gameState.players[socket.id]) return;
-        
-        const { x, y, message } = data;
-        
-        io.emit('pingReceived', {
-            id: `ping_${Date.now()}_${socket.id}`,
-            x: x,
-            y: y,
-            message: message,
+        io.emit('newPing', {
+            id: Date.now().toString(),
+            x,
+            y,
+            message,
             sender: gameState.players[socket.id].name,
+            senderId: socket.id,
             timestamp: Date.now()
         });
     });
-    
-    // Start game event
-    socket.on('startGame', () => {
-        io.emit('startGame');
-        console.log('Game started by host:', socket.id);
-    });
-    
-    // Disconnect
+
+    // Core player disconnect handling
     socket.on('disconnect', () => {
-        console.log(`User disconnected: ${socket.id}`);
+        console.log(`Player disconnected: ${socket.id}`);
         
         if (gameState.players[socket.id]) {
-            // Notify other players
-            io.emit('playerLeft', {
-                id: socket.id,
-                name: gameState.players[socket.id].name
-            });
-            
-            // Check if this player was the host
             const wasHost = gameState.players[socket.id].isHost;
             
-            // Remove player from game
+            // Remove player from game state
             delete gameState.players[socket.id];
+            
+            // Broadcast player left to all clients
+            io.emit('playerLeft', { id: socket.id });
             
             // If the host left and there are still players, assign a new host
             if (wasHost && Object.keys(gameState.players).length > 0) {
                 const newHostId = Object.keys(gameState.players)[0];
                 gameState.players[newHostId].isHost = true;
                 
-                io.emit('newHost', {
-                    id: newHostId,
-                    name: gameState.players[newHostId].name
-                });
-                io.emit('gameState', gameState); // Ensure all clients get updated state
+                io.emit('newHost', { id: newHostId });
+            }
+            
+            // If no players left, reset game state
+            if (Object.keys(gameState.players).length === 0) {
+                gameState.isGameStarted = false;
+                gameState.hubProgress = {
+                    energy: { current: 0, max: 1000 },
+                    water: { current: 0, max: 1000 },
+                    organic: { current: 0, max: 1000 },
+                    mineral: { current: 0, max: 1000 }
+                };
             }
         }
     });
 });
 
-// Root route
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+// Periodic state updates (broadcasting positions at regular intervals)
+// This ensures clients stay in sync even with packet loss
+const STATE_UPDATE_INTERVAL = 1000; // ms
+setInterval(() => {
+    // Only send if there are active players
+    if (Object.keys(gameState.players).length > 0) {
+        const currentTime = Date.now();
+        const playerPositions = {};
+        
+        Object.keys(gameState.players).forEach(id => {
+            const player = gameState.players[id];
+            playerPositions[id] = {
+                position: player.position,
+                velocity: player.velocity,
+                direction: player.direction,
+                isMoving: player.isMoving
+            };
+        });
+        
+        io.emit('gameStateUpdate', {
+            playerPositions,
+            timestamp: currentTime
+        });
+        
+        gameState.lastUpdateTime = currentTime;
+    }
+}, STATE_UPDATE_INTERVAL);
+
+// Health check endpoint for Render
+app.get('/health', (req, res) => {
+    res.status(200).json({ 
+        status: 'ok',
+        uptime: process.uptime(),
+        timestamp: Date.now(),
+        playerCount: Object.keys(gameState.players).length,
+        deployment: DEPLOYMENT_URL
+    });
 });
 
-// Start server
+// Start the server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-});
+    console.log(`External URL: ${DEPLOYMENT_URL}`);
+    console.log(`Local URL: http://localhost:${PORT}`);
+}); 
