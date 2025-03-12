@@ -5399,13 +5399,4 @@ document.addEventListener('DOMContentLoaded', () => {
             notification.remove();
         }, 2500);
     }
-
-    // Helper function to get star screen position if not already available
-    function getStarScreenPosition(star) {
-        // Convert world coordinates to screen coordinates
-        return {
-            x: (star.x - offsetX) * scale + canvas.width / 2,
-            y: (star.y - offsetY) * scale + canvas.height / 2
-        };
-    }
 }); 
