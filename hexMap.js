@@ -1956,10 +1956,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // If position changed and we're connected to a server, emit update
-        if (player.isMoving && socket && socket.connected) {
+        if (currentPlayer.isMoving && socket && socket.connected) {
             socket.emit('updatePosition', {
-                x: player.x,
-                y: player.y
+                x: currentPlayer.x,
+                y: currentPlayer.y
             });
         }
         
