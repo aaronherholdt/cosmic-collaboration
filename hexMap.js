@@ -1935,9 +1935,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 player.x = player.targetX;
                 player.y = player.targetY;
                 player.isMoving = false;
-                return;
-            }
-            
+            return;
+        }
+
             // Calculate next position
             const moveX = (dx / distance) * player.speed;
             const moveY = (dy / distance) * player.speed;
@@ -2419,48 +2419,22 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Main render function
     function render() {
-        // Clear canvas
-        ctx.clearRect(0, 0, worldWidth, worldHeight);
-        
-        // Draw background
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         drawBackground();
-        
-        // Draw star systems with their hexagons
         drawStarSystems();
-        
-        // Draw star system boundaries
         drawStarBoundaries();
-        
-        // Update and draw player
-        updatePlayerPosition();
-        
-        // Set currentPlayer if it's not defined but we have a valid player ID
-        if (!currentPlayer && currentPlayerId && players[currentPlayerId]) {
-            currentPlayer = players[currentPlayerId];
-            console.log("Setting currentPlayer in render():", currentPlayer);
-        }
-        
-        // Draw the current player
+
+        // Update and draw current player
         if (currentPlayer) {
-            drawPlayer();
+            updatePlayerPosition(); // Call the updated function
+            drawPlayer(currentPlayer); // Assuming this draws the player's rocket
+        } else {
+            console.warn("currentPlayer not defined yet in render");
         }
-        
-        // Draw all players (including the local player)
+
+        // Draw other players
         drawPlayers();
-        
-        // Draw mini-map
-        drawMiniMap();
-        
-        // Update pan limit indicator
-        updatePanLimitIndicator();
-        
-        // Update ping positions
         updateAllPingPositions();
-        
-        // Update explore button position if active
-        if (activeExploreButtonStar) {
-            updateExploreButtonPosition();
-        }
     }
     
     // Handle window resize
@@ -5628,52 +5602,49 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Helper function to move player in a direction
     function movePlayerInDirection(direction) {
-        const moveDistance = 100; // Adjust based on your game scale
+        if (!currentPlayer) return;
         
-        // Calculate target based on direction
+        const moveDistance = 100;
+        let targetX = currentPlayer.x;
+        let targetY = currentPlayer.y;
+        
         switch(direction) {
-            case 'n': 
-                player.targetY = player.y - moveDistance;
-                player.targetX = player.x;
+            case 'n':
+                targetY -= moveDistance;
                 break;
-            case 's': 
-                player.targetY = player.y + moveDistance;
-                player.targetX = player.x;
+            case 's':
+                targetY += moveDistance;
                 break;
-            case 'e': 
-                player.targetX = player.x + moveDistance;
-                player.targetY = player.y;
+            case 'e':
+                targetX += moveDistance;
                 break;
-            case 'w': 
-                player.targetX = player.x - moveDistance;
-                player.targetY = player.y;
+            case 'w':
+                targetX -= moveDistance;
                 break;
-            case 'ne': 
-                player.targetX = player.x + moveDistance * 0.7;
-                player.targetY = player.y - moveDistance * 0.7;
+            case 'ne':
+                targetX += moveDistance * 0.7;
+                targetY -= moveDistance * 0.7;
                 break;
-            case 'nw': 
-                player.targetX = player.x - moveDistance * 0.7;
-                player.targetY = player.y - moveDistance * 0.7;
+            case 'nw':
+                targetX -= moveDistance * 0.7;
+                targetY -= moveDistance * 0.7;
                 break;
-            case 'se': 
-                player.targetX = player.x + moveDistance * 0.7;
-                player.targetY = player.y + moveDistance * 0.7;
+            case 'se':
+                targetX += moveDistance * 0.7;
+                targetY += moveDistance * 0.7;
                 break;
-            case 'sw': 
-                player.targetX = player.x - moveDistance * 0.7;
-                player.targetY = player.y + moveDistance * 0.7;
+            case 'sw':
+                targetX -= moveDistance * 0.7;
+                targetY += moveDistance * 0.7;
                 break;
         }
         
-        player.isMoving = true;
+        currentPlayer.targetX = targetX;
+        currentPlayer.targetY = targetY;
+        currentPlayer.isMoving = true;
         
-        // Send position update to server if connected
         if (socket && socket.connected) {
-            socket.emit('updatePosition', {
-                x: player.targetX,
-                y: player.targetY
-            });
+            socket.emit('updatePosition', { x: targetX, y: targetY });
         }
     }
 
