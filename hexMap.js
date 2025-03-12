@@ -1,4 +1,26 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Define constants at the top
+    const collaborationToggleHTML = `
+        <button id="toggleCollaborationPanel" class="control-button">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white">
+                <path d="M12,1L3,5v6c0,5.55 3.84,10.74 9,12c5.16-1.26 9-6.45 9-12V5L12,1z M12,11.99h7c-0.53,4.12-3.28,7.79-7,8.94 V12H5V6.3l7-3.11V11.99z"/>
+            </svg>
+        </button>
+    `;
+
+    // Define the controls overlay HTML
+    const controlsHTML = `
+        <div class="controls-overlay">
+            <button id="zoomInBtn" class="control-button">+</button>
+            <button id="zoomOutBtn" class="control-button">-</button>
+            <button id="inventoryBtn" class="control-button">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white">
+                    <path d="M19,3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3M19,19H5V5H19V19M17,17H7V7H17V17Z"/>
+                </svg>
+            </button>
+        </div>
+    `;
+    
     // Screen management
     const loginScreen = document.getElementById('loginScreen');
     const waitingRoomScreen = document.getElementById('waitingRoomScreen');
@@ -543,45 +565,69 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize the Galactic Hub progress display
     function initializeHubProgress() {
-        const resourceGoalsDiv = document.getElementById('resourceGoals');
-        resourceGoalsDiv.innerHTML = '';
-
-        for (const [resourceType, goal] of Object.entries(hubGoals)) {
-            const resourceGoalDiv = document.createElement('div');
-            resourceGoalDiv.className = 'resource-goal';
-            resourceGoalDiv.innerHTML = `
-                <div class="resource-goal-label">
-                    <span>${resourceType.charAt(0).toUpperCase() + resourceType.slice(1)}</span>
-                    <span id="${resourceType}-progress">${goal.current}/${goal.target}</span>
+        // Define the toggleButtonHTML variable first before using it
+        const toggleButtonHTML = '<button class="toggle-hub-btn">▼</button>';
+        
+        // Create hub progress container if it doesn't exist
+        if (!document.querySelector('.hub-progress')) {
+            const hubProgressHTML = `
+                <div class="hub-progress">
+                    ${toggleButtonHTML}
+                    <h3>Hub Construction Progress</h3>
+                    <div class="hub-visual-modules">
+                        <div class="hub-module" data-module="energy">
+                            <div class="module-icon energy-icon"></div>
+                            <div class="module-fill"></div>
                 </div>
-                <div class="resource-goal-progress">
-                    <div class="resource-goal-bar" id="${resourceType}-bar" style="width: 0%; background-color: ${goal.color};"></div>
+                        <div class="hub-module" data-module="water">
+                            <div class="module-icon water-icon"></div>
+                            <div class="module-fill"></div>
+                </div>
+                        <div class="hub-module" data-module="core">
+                            <div class="module-icon core-icon"></div>
+                            <div class="module-fill"></div>
+                </div>
+                        <div class="hub-module" data-module="organic">
+                            <div class="module-icon organic-icon"></div>
+                            <div class="module-fill"></div>
+                        </div>
+                        <div class="hub-module" data-module="mineral">
+                            <div class="module-icon mineral-icon"></div>
+                            <div class="module-fill"></div>
+                        </div>
+                    </div>
+                    <div id="resourceGoals"></div>
+                    <div class="hub-objective">
+                        <p>Cooperate with other players to build the galactic hub. Each player contributes resources from their discoveries.</p>
+                    </div>
+                    <div class="contribution-tracking">
+                        <h4>Team Contributions</h4>
+                        <div class="player-contributions" id="playerContributions"></div>
+                    </div>
                 </div>
             `;
-            resourceGoalsDiv.appendChild(resourceGoalDiv);
-        }
-
-        playerContributions = {};
-        updatePlayerContributionsDisplay();
-        resetHubModules();
-        
-        // Add the collaboration panel toggle for small screens
-        const gameScreen = document.getElementById('gameScreen');
-        if (!document.getElementById('toggleCollaborationPanel')) {
-            gameScreen.insertAdjacentHTML('beforeend', toggleButtonHTML);
-            document.getElementById('toggleCollaborationPanel').addEventListener('click', toggleCollaborationPanel);
-        }
-        
-        // Add control overlay for all devices
-        if (!document.getElementById('controlsOverlay')) {
-            gameScreen.insertAdjacentHTML('beforeend', controlsOverlayHTML);
-            setupControlButtons();
-        }
-        
-        // Detect touch devices
-        if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
-            document.body.classList.add('touch-device');
-            setupTouchControls();
+            
+            document.querySelector('.game-interface').insertAdjacentHTML('beforeend', hubProgressHTML);
+            
+            // Initialize empty progress data
+            resourceGoals = {
+                energy: { required: 100, current: 0 },
+                water: { required: 100, current: 0 },
+                organic: { required: 100, current: 0 },
+                mineral: { required: 100, current: 0 }
+            };
+            
+            // Update the display
+            updateHubProgress();
+            
+            // Add toggle functionality
+            const toggleBtn = document.querySelector('.toggle-hub-btn');
+            const hubProgress = document.querySelector('.hub-progress');
+            
+            toggleBtn.addEventListener('click', () => {
+                hubProgress.classList.toggle('collapsed');
+                toggleBtn.textContent = hubProgress.classList.contains('collapsed') ? '▲' : '▼';
+            });
         }
     }
     
