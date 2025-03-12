@@ -3113,6 +3113,78 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize galaxy and render
     initializeGalaxy();
     
+        // Add this function before the animationLoop function in hexMap.js
+    function updateMiniMap() {
+        const mapSize = 150; // Size of the mini-map (width and height)
+        const mapX = worldWidth - mapSize - 20; // Position in bottom-right corner with padding
+        const mapY = worldHeight - mapSize - 20;
+        const mapScale = mapSize / (galaxyRadius * 2.5); // Scale factor to fit galaxy in mini-map
+
+        // Draw mini-map background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(mapX, mapY, mapSize, mapSize);
+        ctx.strokeStyle = '#444444';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(mapX, mapY, mapSize, mapSize);
+
+        // Center of the mini-map in world coordinates
+        const mapCenterX = galaxyCenterX;
+        const mapCenterY = galaxyCenterY;
+
+        // Draw star systems
+        starSystems.forEach(star => {
+            // Convert star position to mini-map coordinates
+            const miniX = mapX + (star.x - mapCenterX) * mapScale + mapSize / 2;
+            const miniY = mapY + (star.y - mapCenterY) * mapScale + mapSize / 2;
+
+            // Only draw if within mini-map bounds
+            if (miniX >= mapX && miniX <= mapX + mapSize && miniY >= mapY && miniY <= mapY + mapSize) {
+                ctx.beginPath();
+                ctx.arc(miniX, miniY, 2, 0, Math.PI * 2); // Small dot for each star
+                ctx.fillStyle = starColors[star.colorIndex][2]; // Use a medium shade from the star's color palette
+                ctx.fill();
+            }
+        });
+
+        // Draw all players
+        Object.values(players).forEach(p => {
+            const miniX = mapX + (p.x - mapCenterX) * mapScale + mapSize / 2;
+            const miniY = mapY + (p.y - mapCenterY) * mapScale + mapSize / 2;
+
+            if (miniX >= mapX && miniX <= mapX + mapSize && miniY >= mapY && miniY <= mapY + mapSize) {
+                ctx.beginPath();
+                ctx.arc(miniX, miniY, 3, 0, Math.PI * 2); // Slightly larger dot for players
+                ctx.fillStyle = getRocketColor(p.rocketType);
+                ctx.fill();
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+        });
+
+        // Draw camera view rectangle
+        const viewWidth = worldWidth / zoom;
+        const viewHeight = worldHeight / zoom;
+        const viewMiniX = mapX + (cameraX - viewWidth / 2 - mapCenterX) * mapScale + mapSize / 2;
+        const viewMiniY = mapY + (cameraY - viewHeight / 2 - mapCenterY) * mapScale + mapSize / 2;
+        const viewMiniWidth = viewWidth * mapScale;
+        const viewMiniHeight = viewHeight * mapScale;
+
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(viewMiniX, viewMiniY, viewMiniWidth, viewMiniHeight);
+    }
+
+    // Helper function to get rocket color (reuse from drawPlayers if already defined)
+    function getRocketColor(rocketType) {
+        switch (rocketType) {
+            case 'red': return '#FF5252';
+            case 'blue': return '#4682B4';
+            case 'green': return '#4CAF50';
+            case 'yellow': return '#FFD700';
+            default: return '#FFFFFF';
+        }
+    }
     // Initialize player position in empty space
     function initializePlayerPosition() {
         // Try to find a safe position for the player
@@ -3177,7 +3249,102 @@ document.addEventListener('DOMContentLoaded', () => {
     
     render();
 
-    
+    function drawPlayers() {
+        ctx.save();
+
+        // Iterate over all players in the players object
+        Object.values(players).forEach(p => {
+            // Convert world coordinates to screen coordinates
+            const screenX = (p.x - cameraX) * zoom + canvas.width / 2;
+            const screenY = (p.y - cameraY) * zoom + canvas.height / 2;
+
+            // Skip drawing if the player is off-screen
+            if (screenX < -player.size * zoom || screenX > canvas.width + player.size * zoom ||
+                screenY < -player.size * zoom || screenY > canvas.height + player.size * zoom) {
+                return;
+            }
+
+            // Save context for transformations
+            ctx.save();
+            ctx.translate(screenX, screenY);
+            ctx.rotate(p.rotation + Math.PI / 2); // Adjust rotation so rocket points in movement direction
+
+            // Determine rocket color based on type
+            let rocketColor;
+            switch (p.rocketType) {
+                case 'red': rocketColor = '#FF5252'; break;
+                case 'blue': rocketColor = '#4682B4'; break;
+                case 'green': rocketColor = '#4CAF50'; break;
+                case 'yellow': rocketColor = '#FFD700'; break;
+                default: rocketColor = '#FFFFFF'; // Fallback color
+            }
+
+            // Draw rocket (using a simplified triangle shape similar to the SVG in CSS)
+            const rocketSize = player.size * zoom;
+            ctx.beginPath();
+            ctx.moveTo(0, -rocketSize * 0.5); // Top point
+            ctx.lineTo(-rocketSize * 0.3, rocketSize * 0.5); // Bottom left
+            ctx.lineTo(rocketSize * 0.3, rocketSize * 0.5); // Bottom right
+            ctx.closePath();
+            ctx.fillStyle = rocketColor;
+            ctx.fill();
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 1 * zoom;
+            ctx.stroke();
+
+            // Restore context after drawing rocket
+            ctx.restore();
+
+            // Draw player name tag
+            drawPlayerNameTag(screenX, screenY, rocketSize, p.name, p.rocketType);
+        });
+
+        ctx.restore();
+    }
+
+    // Modified drawPlayerNameTag to accept name and rocketType parameters
+    function drawPlayerNameTag(x, y, size, name, rocketType) {
+        if (!name) return;
+
+        ctx.save();
+
+        const fontSize = Math.max(10, Math.min(16, 12 * zoom));
+        ctx.font = `bold ${fontSize}px Arial`;
+
+        const textWidth = ctx.measureText(name).width;
+        const padding = 6 * zoom;
+        const tagWidth = textWidth + (padding * 2);
+        const tagHeight = fontSize + (padding * 1.5);
+
+        const tagX = x + size + (10 * zoom);
+        const tagY = y - (tagHeight / 2);
+
+        let tagColor;
+        switch (rocketType) {
+            case 'red': tagColor = '#FF5252'; break;
+            case 'blue': tagColor = '#4682B4'; break;
+            case 'green': tagColor = '#4CAF50'; break;
+            case 'yellow': tagColor = '#FFD700'; break;
+            default: tagColor = '#4682B4';
+        }
+
+        ctx.fillStyle = tagColor;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1.5 * zoom;
+        roundRect(ctx, tagX, tagY, tagWidth, tagHeight, 4 * zoom, true, true);
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(name, tagX + (tagWidth / 2), tagY + (tagHeight / 2));
+
+        ctx.beginPath();
+        ctx.moveTo(x + (size * 0.5), y);
+        ctx.lineTo(tagX, tagY + (tagHeight / 2));
+        ctx.stroke();
+
+        ctx.restore();
+    }
     
     // Start animation loop
     function animationLoop() {
@@ -4228,70 +4395,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
     }
 
-    // Draw player name tag
-    function drawPlayerNameTag(x, y, size) {
-        // Only draw if we have a player name
-        if (!currentPlayerName) return;
-        
-        // Save context state
-        ctx.save();
-        
-        // Set font based on zoom level
-        const fontSize = Math.max(10, Math.min(16, 12 * zoom));
-        ctx.font = `bold ${fontSize}px Arial`;
-        
-        // Measure text width for background
-        const textWidth = ctx.measureText(currentPlayerName).width;
-        const padding = 6 * zoom;
-        const tagWidth = textWidth + (padding * 2);
-        const tagHeight = fontSize + (padding * 1.5);
-        
-        // Position the tag to the right of the rocket instead of above it
-        // This avoids overlap with the fuel gauge
-        const tagX = x + size + (10 * zoom);
-        const tagY = y - (tagHeight / 2);
-        
-        // Get rocket color for the tag
-        let tagColor;
-        switch(player.rocketType) {
-            case 'red':
-                tagColor = '#FF5252';
-                break;
-            case 'green':
-                tagColor = '#4CAF50';
-                break;
-            case 'yellow':
-                tagColor = '#FFD700';
-                break;
-            case 'blue':
-            default:
-                tagColor = '#4682B4';
-                break;
-        }
-        
-        // Draw tag background with rocket color
-        ctx.fillStyle = tagColor;
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 1.5 * zoom;
-        
-        // Draw rounded rectangle for tag
-        roundRect(ctx, tagX, tagY, tagWidth, tagHeight, 4 * zoom, true, true);
-        
-        // Draw text
-        ctx.fillStyle = '#FFFFFF';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(currentPlayerName, tagX + (tagWidth / 2), tagY + (tagHeight / 2));
-        
-        // Draw connecting line from tag to rocket
-        ctx.beginPath();
-        ctx.moveTo(x + (size * 0.5), y);
-        ctx.lineTo(tagX, tagY + (tagHeight / 2));
-        ctx.stroke();
-        
-        // Restore context
-        ctx.restore();
-    }
     
     // Helper function to draw rounded rectangles
     function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
@@ -5379,100 +5482,5 @@ document.addEventListener('DOMContentLoaded', () => {
     // Add this function before the animationLoop function in hexMap.js
     
     // Add this function before the animationLoop function in hexMap.js
-    function drawPlayers() {
-        ctx.save();
-
-        // Iterate over all players in the players object
-        Object.values(players).forEach(p => {
-            // Convert world coordinates to screen coordinates
-            const screenX = (p.x - cameraX) * zoom + canvas.width / 2;
-            const screenY = (p.y - cameraY) * zoom + canvas.height / 2;
-
-            // Skip drawing if the player is off-screen
-            if (screenX < -player.size * zoom || screenX > canvas.width + player.size * zoom ||
-                screenY < -player.size * zoom || screenY > canvas.height + player.size * zoom) {
-                return;
-            }
-
-            // Save context for transformations
-            ctx.save();
-            ctx.translate(screenX, screenY);
-            ctx.rotate(p.rotation + Math.PI / 2); // Adjust rotation so rocket points in movement direction
-
-            // Determine rocket color based on type
-            let rocketColor;
-            switch (p.rocketType) {
-                case 'red': rocketColor = '#FF5252'; break;
-                case 'blue': rocketColor = '#4682B4'; break;
-                case 'green': rocketColor = '#4CAF50'; break;
-                case 'yellow': rocketColor = '#FFD700'; break;
-                default: rocketColor = '#FFFFFF'; // Fallback color
-            }
-
-            // Draw rocket (using a simplified triangle shape similar to the SVG in CSS)
-            const rocketSize = player.size * zoom;
-            ctx.beginPath();
-            ctx.moveTo(0, -rocketSize * 0.5); // Top point
-            ctx.lineTo(-rocketSize * 0.3, rocketSize * 0.5); // Bottom left
-            ctx.lineTo(rocketSize * 0.3, rocketSize * 0.5); // Bottom right
-            ctx.closePath();
-            ctx.fillStyle = rocketColor;
-            ctx.fill();
-            ctx.strokeStyle = '#FFFFFF';
-            ctx.lineWidth = 1 * zoom;
-            ctx.stroke();
-
-            // Restore context after drawing rocket
-            ctx.restore();
-
-            // Draw player name tag
-            drawPlayerNameTag(screenX, screenY, rocketSize, p.name, p.rocketType);
-        });
-
-        ctx.restore();
-    }
-
-    // Modified drawPlayerNameTag to accept name and rocketType parameters
-    function drawPlayerNameTag(x, y, size, name, rocketType) {
-        if (!name) return;
-
-        ctx.save();
-
-        const fontSize = Math.max(10, Math.min(16, 12 * zoom));
-        ctx.font = `bold ${fontSize}px Arial`;
-
-        const textWidth = ctx.measureText(name).width;
-        const padding = 6 * zoom;
-        const tagWidth = textWidth + (padding * 2);
-        const tagHeight = fontSize + (padding * 1.5);
-
-        const tagX = x + size + (10 * zoom);
-        const tagY = y - (tagHeight / 2);
-
-        let tagColor;
-        switch (rocketType) {
-            case 'red': tagColor = '#FF5252'; break;
-            case 'blue': tagColor = '#4682B4'; break;
-            case 'green': tagColor = '#4CAF50'; break;
-            case 'yellow': tagColor = '#FFD700'; break;
-            default: tagColor = '#4682B4';
-        }
-
-        ctx.fillStyle = tagColor;
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 1.5 * zoom;
-        roundRect(ctx, tagX, tagY, tagWidth, tagHeight, 4 * zoom, true, true);
-
-        ctx.fillStyle = '#FFFFFF';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(name, tagX + (tagWidth / 2), tagY + (tagHeight / 2));
-
-        ctx.beginPath();
-        ctx.moveTo(x + (size * 0.5), y);
-        ctx.lineTo(tagX, tagY + (tagHeight / 2));
-        ctx.stroke();
-
-        ctx.restore();
-    }
+    
 }); 
