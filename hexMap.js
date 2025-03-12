@@ -3176,6 +3176,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initializePlayerPosition();
     
     render();
+
+    
     
     // Start animation loop
     function animationLoop() {
@@ -5372,5 +5374,105 @@ document.addEventListener('DOMContentLoaded', () => {
             cameraX = currentPlayer.x;
             cameraY = currentPlayer.y;
         }
+    }
+
+    // Add this function before the animationLoop function in hexMap.js
+    
+    // Add this function before the animationLoop function in hexMap.js
+    function drawPlayers() {
+        ctx.save();
+
+        // Iterate over all players in the players object
+        Object.values(players).forEach(p => {
+            // Convert world coordinates to screen coordinates
+            const screenX = (p.x - cameraX) * zoom + canvas.width / 2;
+            const screenY = (p.y - cameraY) * zoom + canvas.height / 2;
+
+            // Skip drawing if the player is off-screen
+            if (screenX < -player.size * zoom || screenX > canvas.width + player.size * zoom ||
+                screenY < -player.size * zoom || screenY > canvas.height + player.size * zoom) {
+                return;
+            }
+
+            // Save context for transformations
+            ctx.save();
+            ctx.translate(screenX, screenY);
+            ctx.rotate(p.rotation + Math.PI / 2); // Adjust rotation so rocket points in movement direction
+
+            // Determine rocket color based on type
+            let rocketColor;
+            switch (p.rocketType) {
+                case 'red': rocketColor = '#FF5252'; break;
+                case 'blue': rocketColor = '#4682B4'; break;
+                case 'green': rocketColor = '#4CAF50'; break;
+                case 'yellow': rocketColor = '#FFD700'; break;
+                default: rocketColor = '#FFFFFF'; // Fallback color
+            }
+
+            // Draw rocket (using a simplified triangle shape similar to the SVG in CSS)
+            const rocketSize = player.size * zoom;
+            ctx.beginPath();
+            ctx.moveTo(0, -rocketSize * 0.5); // Top point
+            ctx.lineTo(-rocketSize * 0.3, rocketSize * 0.5); // Bottom left
+            ctx.lineTo(rocketSize * 0.3, rocketSize * 0.5); // Bottom right
+            ctx.closePath();
+            ctx.fillStyle = rocketColor;
+            ctx.fill();
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 1 * zoom;
+            ctx.stroke();
+
+            // Restore context after drawing rocket
+            ctx.restore();
+
+            // Draw player name tag
+            drawPlayerNameTag(screenX, screenY, rocketSize, p.name, p.rocketType);
+        });
+
+        ctx.restore();
+    }
+
+    // Modified drawPlayerNameTag to accept name and rocketType parameters
+    function drawPlayerNameTag(x, y, size, name, rocketType) {
+        if (!name) return;
+
+        ctx.save();
+
+        const fontSize = Math.max(10, Math.min(16, 12 * zoom));
+        ctx.font = `bold ${fontSize}px Arial`;
+
+        const textWidth = ctx.measureText(name).width;
+        const padding = 6 * zoom;
+        const tagWidth = textWidth + (padding * 2);
+        const tagHeight = fontSize + (padding * 1.5);
+
+        const tagX = x + size + (10 * zoom);
+        const tagY = y - (tagHeight / 2);
+
+        let tagColor;
+        switch (rocketType) {
+            case 'red': tagColor = '#FF5252'; break;
+            case 'blue': tagColor = '#4682B4'; break;
+            case 'green': tagColor = '#4CAF50'; break;
+            case 'yellow': tagColor = '#FFD700'; break;
+            default: tagColor = '#4682B4';
+        }
+
+        ctx.fillStyle = tagColor;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1.5 * zoom;
+        roundRect(ctx, tagX, tagY, tagWidth, tagHeight, 4 * zoom, true, true);
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(name, tagX + (tagWidth / 2), tagY + (tagHeight / 2));
+
+        ctx.beginPath();
+        ctx.moveTo(x + (size * 0.5), y);
+        ctx.lineTo(tagX, tagY + (tagHeight / 2));
+        ctx.stroke();
+
+        ctx.restore();
     }
 }); 
