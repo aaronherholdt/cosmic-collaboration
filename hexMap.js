@@ -1,26 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Define constants at the top
-    const collaborationToggleHTML = `
-        <button id="toggleCollaborationPanel" class="control-button">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white">
-                <path d="M12,1L3,5v6c0,5.55 3.84,10.74 9,12c5.16-1.26 9-6.45 9-12V5L12,1z M12,11.99h7c-0.53,4.12-3.28,7.79-7,8.94 V12H5V6.3l7-3.11V11.99z"/>
-            </svg>
-        </button>
-    `;
-
-    // Define the controls overlay HTML
-    const controlsHTML = `
-        <div class="controls-overlay">
-            <button id="zoomInBtn" class="control-button">+</button>
-            <button id="zoomOutBtn" class="control-button">-</button>
-            <button id="inventoryBtn" class="control-button">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white">
-                    <path d="M19,3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3M19,19H5V5H19V19M17,17H7V7H17V17Z"/>
-                </svg>
-            </button>
-        </div>
-    `;
-    
     // Screen management
     const loginScreen = document.getElementById('loginScreen');
     const waitingRoomScreen = document.getElementById('waitingRoomScreen');
@@ -45,16 +23,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let isConnected = false;
     
     // Player data
-    let currentPlayer = null;     // Reference to the local player in players object
-    let currentPlayerId = '';     // Unique identifier for the current player
-    let currentPlayerName = '';   // Display name of the current player
-    let selectedRocketType = 'blue'; // Default rocket type selection
-    let players = {};             // Collection of all players in the game
-    let isHost = false;           // Flag indicating if current player is the host
-    
-    // Default size and speed values to use when creating players
-    const DEFAULT_PLAYER_SIZE = 30;
-    const DEFAULT_PLAYER_SPEED = 8; // Higher speed for faster movement
+    let currentPlayerId = '';
+    let currentPlayerName = '';
+    let selectedRocketType = 'blue'; // Default rocket
+    const players = {}; // Store all players
+    let isHost = false; // First player becomes host
     
     // Galactic Hub data
     let hubGoals = {
@@ -90,158 +63,188 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize Socket.io connection
     function initializeSocketConnection() {
-        // Connect to the server using the current URL
+        // Connect to server using Socket.io
         socket = io('https://cosmic-collaboration.onrender.com', {
-            reconnection: true,
-            reconnectionAttempts: 5,
-            reconnectionDelay: 1000,
+            transports: ['websocket', 'polling'], // Ensure WebSocket is prioritized
+            secure: true
         });
         
-        // Display loading indicator
-        const loadingMsg = document.createElement('div');
-        loadingMsg.className = 'system-notification';
-        loadingMsg.textContent = 'Connecting to server...';
-        document.body.appendChild(loadingMsg);
-
         socket.on('connect', () => {
-            console.log('Connected to server!');
-            loadingMsg.textContent = 'Connected!';
-            setTimeout(() => {
-                if (loadingMsg.parentNode) {
-                    loadingMsg.parentNode.removeChild(loadingMsg);
-                }
-            }, 2000);
-            updateStartButton(); // Call after connection to ensure UI reflects host status
+            isConnected = true;
+            currentPlayerId = socket.id;
+            console.log('Connected to server with ID:', currentPlayerId);
         });
         
-        // Add game state handler
-        socket.on('gameState', (state) => {
-            console.log('Received game state:', state);
-            
-            // Update players from server state
-            if (state.players) {
-                // Clear existing players and add from server state
-                players = {};
-                
-                // Add each player from the state
-                Object.entries(state.players).forEach(([id, playerData]) => {
-                    players[id] = playerData;
-                    
-                    // Update local player info if this is us
-                    if (id === socket.id) {
-                        isHost = playerData.isHost;
-                        currentPlayerId = id;
-                        currentPlayerName = playerData.name;
-                        selectedRocketType = playerData.rocketType;
-                    }
-                });
-                
-                // Update UI
-                updatePlayerList();
-                updateStartButton();
-            }
-            
-            // Handle other game state updates here if needed
-            // For example, hub progress, star systems, etc.
-        });
-
-        socket.on('playerJoined', (data) => {
-            console.log('Player joined:', data);
-            
-            // Update local player data if this is us
-            if (data.id === socket.id) {
-                isHost = data.isHost;
-                currentPlayerId = data.id;
-                currentPlayerName = data.name;
-                selectedRocketType = data.rocketType;
-                showSystemMessage(`You joined as ${data.isHost ? 'host' : 'player'}`);
-            } else {
-                showSystemMessage(`${data.name} joined the game`);
-            }
-            
-            // Add player to local players object
-            addPlayer(data.id, data.name, data.isHost, data.rocketType);
-            updateStartButton();
-        });
-
         socket.on('connect_error', (error) => {
             console.error('Connection error:', error);
-            loadingMsg.textContent = 'Connection error! Please refresh.';
-            // Simulation fallback removed
+            showSystemMessage('Connection error: ' + error.message, 5000);
         });
-
-        // Handle game state from server
-        socket.on('gameState', (state) => {
-            // Update your game with the server state
-            console.log('Received game state:', state);
-            
-            // Clear simulated players if any
-            otherPlayers = {};
-            
-            // Add all current players from the server
-            if (state.players) {
-                Object.keys(state.players).forEach(playerId => {
-                    if (playerId !== socket.id) {
-                        const p = state.players[playerId];
-                        // Make sure we create the player first
-                        addPlayer(playerId, p.name, p.isHost, p.rocketType);
-                        
-                        // THEN update positions if available (only after player is created)
-                        if (p.position && otherPlayers[playerId]) {
-                            otherPlayers[playerId].x = p.position.x || 0;
-                            otherPlayers[playerId].y = p.position.y || 0;
-                            otherPlayers[playerId].targetX = p.position.x || 0;
-                            otherPlayers[playerId].targetY = p.position.y || 0;
-                        }
-                    }
-                });
-            } else {
-                console.warn('Received game state without players property');
+        
+        socket.on('playerJoined', (player) => {
+            addPlayer(player.id, player.name, player.isHost, player.rocketType);
+            // If the player already has a position, update it
+            if (player.position) {
+                updateOtherPlayerPosition(player.id, player.position, player.direction, player.isMoving);
             }
             
-            // Update the player list UI
-            updatePlayerList();
+            showSystemMessage(`${player.name} has joined the game!`, 3000);
         });
-
-        // Handle new player joined
-        socket.on('playerJoined', (data) => {
-            console.log('Player joined:', data);
-            showSystemMessage(`${data.name} joined the game!`);
+        
+        socket.on('playerLeft', (data) => {
+            if (players[data.id]) {
+                const playerName = players[data.id].name;
+                removePlayer(data.id);
+                showSystemMessage(`${playerName} has left the game`, 3000);
+            }
+        });
+        
+        socket.on('gameStarted', () => {
+            startGame();
+        });
+        
+        socket.on('playerMoved', (data) => {
+            // Update other player positions in real-time
+            if (data.id !== currentPlayerId) {
+                updateOtherPlayerPosition(data.id, data.position, data.direction, data.isMoving);
+            }
+        });
+        
+        socket.on('playerStoppedMoving', (data) => {
+            // Handle when another player stops moving
+            if (data.id !== currentPlayerId) {
+                stopOtherPlayerMovement(data.id, data.position);
+            }
+        });
+        
+        socket.on('gameStateUpdate', (data) => {
+            // Periodic update of all player positions
+            const { playerPositions, timestamp } = data;
             
-            // Don't add ourselves again
-            if (data.id !== socket.id) {
-                addPlayer(data.id, data.name, data.isHost, data.rocketType);
+            // Update all player positions except current player
+            Object.keys(playerPositions).forEach(id => {
+                if (id !== currentPlayerId) {
+                    const playerData = playerPositions[id];
+                    updateOtherPlayerPosition(
+                        id, 
+                        playerData.position, 
+                        playerData.direction, 
+                        playerData.isMoving
+                    );
+                }
+            });
+        });
+        
+        socket.on('resourceHarvested', (data) => {
+            updatePlayerInventory(data.id, data.resourceType, data.amount);
+        });
+        
+        socket.on('hubContribution', (data) => {
+            updateHubProgress(data.resourceType, data.amount);
+            highlightPlayerContribution(data.playerId);
+        });
+        
+        socket.on('pingPlaced', (data) => {
+            addPing(data.x, data.y, data.message, data.sender);
+        });
+        
+            socket.on('harvestHistoryUpdate', (data) => {
+            if (data.starId && data.history) {
+                harvestHistory.set(data.starId, data.history);
+                if (currentOpenStar && currentOpenStar.id === data.starId) {
+                    updateHarvestHistoryDisplay(currentOpenStar);
+                }
+            }
+        });
+        
+        socket.on('nexusShardActivated', (data) => {
+            if (window.nexusShards && window.nexusShards[data.starId]) {
+                window.nexusShards[data.starId].activated = true;
+                showSystemMessage(`A Nexus Shard has been activated at ${data.starName}!`, 5000);
+                checkNexusCompletion();
+            }
+        });
+        
+        socket.on('hubComplete', () => {
+            showSystemMessage('The Galactic Hub has been completed!', 8000);
+            // Additional hub completion logic can go here
+        });
+        
+        socket.on('newHost', (data) => {
+            // Update host status for the new host
+            if (players[data.id]) {
+                Object.values(players).forEach(p => p.isHost = false);
+                players[data.id].isHost = true;
+                
+                // If current player is the new host, update local state
+                if (data.id === currentPlayerId) {
+                    isHost = true;
+                    startGameBtn.disabled = false;
+                    startGameBtn.textContent = 'Start Game';
+                    showSystemMessage('You are now the host!', 3000);
+                } else {
+                    showSystemMessage(`${players[data.id].name} is now the host`, 3000);
+                }
+                
+                // Update the player list in the UI
                 updatePlayerList();
             }
         });
-
-        // Handle player left
-        socket.on('playerLeft', (data) => {
-            console.log('Player left:', data);
-            showSystemMessage(`${data.name} left the game`);
-            
-            // Use the removePlayer function to properly handle player removal
-            removePlayer(data.id);
-            // updatePlayerList is called inside removePlayer
-            updateStartButton();
+        
+        socket.on('disconnect', () => {
+            isConnected = false;
+            showSystemMessage('Disconnected from server. Trying to reconnect...', 5000);
         });
-
-        // Handle other player movement
-        socket.on('playerMoved', (data) => {
-            if (otherPlayers[data.id]) {
-                otherPlayers[data.id].targetX = data.position.x;
-                otherPlayers[data.id].targetY = data.position.y;
-                otherPlayers[data.id].isMoving = true;
+        
+        socket.on('reconnect', () => {
+            isConnected = true;
+            showSystemMessage('Reconnected to server!', 3000);
+            
+            // Re-register with server
+            if (currentPlayerName && selectedRocketType) {
+                socket.emit('playerJoin', {
+                    playerName: currentPlayerName,
+                    rocketType: selectedRocketType
+                });
             }
         });
-
-        // Other socket event handlers...
+        
+        // Request full game state if we're joining an in-progress game
+        socket.emit('requestGameState');
     }
     
-    // Simulate socket connection for demo
-    function simulateSocketConnection() {
-        isConnected = true;
-        currentPlayerId = 'player_' + Math.random().toString(36).substr(2, 9);
+    // Function to update other players' positions
+    function updateOtherPlayerPosition(playerId, position, direction, isMoving) {
+        if (!players[playerId]) return;
+        
+        // Update the player data
+        players[playerId].x = position.x;
+        players[playerId].y = position.y;
+        players[playerId].rotation = direction || 0;
+        players[playerId].isMoving = isMoving || false;
+        
+        // If player is moving, update target position based on direction
+        if (isMoving && position.velocity) {
+            // Use velocity to predict where they're heading
+            const speedFactor = 5; // Adjust based on your game's speed
+            players[playerId].targetX = position.x + position.velocity.x * speedFactor;
+            players[playerId].targetY = position.y + position.velocity.y * speedFactor;
+        } else {
+            // If not moving, target is current position
+            players[playerId].targetX = position.x;
+            players[playerId].targetY = position.y;
+        }
+    }
+    
+    // Function to handle when another player stops moving
+    function stopOtherPlayerMovement(playerId, position) {
+        if (!players[playerId]) return;
+        
+        // Update the player position and state
+        players[playerId].x = position.x;
+        players[playerId].y = position.y;
+        players[playerId].targetX = position.x;
+        players[playerId].targetY = position.y;
+        players[playerId].isMoving = false;
     }
     
     // Set up rocket selection
@@ -281,119 +284,55 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Please enter a name with at least 2 characters');
             return;
         }
-    
+        
         currentPlayerName = name;
-    
-        if (socket && socket.connected) {
-            currentPlayerId = socket.id;
-            players[currentPlayerId] = {
-                id: currentPlayerId,
-                name: name,
-                isHost: false,
-                rocketType: selectedRocketType,
-                x: 0, // Initial placeholder, will be set by initializePlayerPosition
-                y: 0,
-                targetX: 0,
-                targetY: 0,
-                rotation: 0,
-                isMoving: false,
-                visible: true,
-                speed: 5,
-                size: 30, // Ensure size is defined
-                fuel: 100,
-                maxFuel: 100,
-                inventory: {},
-                chosenResource: null,
-                currentStar: null
-            };
-            currentPlayer = players[currentPlayerId];
-    
-            socket.emit('joinGame', {
-                playerName: name,
-                rocketType: selectedRocketType,
-                position: { x: currentPlayer.x, y: currentPlayer.y }
-            });
-    
-            switchScreen('loginScreen', 'waitingRoomScreen');
-        } else {
-            // Offline mode
-            currentPlayerId = 'local-' + Date.now();
-            players[currentPlayerId] = {
-                id: currentPlayerId,
-                name: name,
-                isHost: true,
-                rocketType: selectedRocketType,
-                x: 0, // Initial placeholder
-                y: 0,
-                targetX: 0,
-                targetY: 0,
-                rotation: 0,
-                isMoving: false,
-                visible: true,
-                speed: 5,
-                size: 30, // Ensure size is defined
-                fuel: 100,
-                maxFuel: 100,
-                inventory: {},
-                chosenResource: null,
-                currentStar: null
-            };
-            currentPlayer = players[currentPlayerId];
-    
-            switchScreen('loginScreen', 'waitingRoomScreen');
-            simulateSocketConnection();
-        }
+        
+        // Add player to the local list (server will assign the actual ID)
+        // The server will assign host status
+        addPlayer(currentPlayerId, name, false, selectedRocketType);
+        
+        // Emit join event to server
+        socket.emit('playerJoin', { 
+            playerName: name, 
+            rocketType: selectedRocketType 
+        });
+        
+        // Switch to waiting room screen
+        switchScreen(loginScreen, waitingRoomScreen);
+        
+        // Host status and start button will be handled via server response
+            startGameBtn.disabled = true;
+            startGameBtn.textContent = 'Waiting for host to start...';
     }
-    
     
     // Add a player to the list
     function addPlayer(id, name, isPlayerHost = false, rocketType) {
-        // Add player to the players object if they don’t exist yet
-        if (!players[id]) {
-            players[id] = {
-                id: id,
-                name: name,
-                isHost: isPlayerHost,
-                rocketType: rocketType,
-                x: 0,
-                y: 0,
-                targetX: 0,
-                targetY: 0,
-                rotation: 0,
-                isMoving: false,
-                visible: true
-            };
-            
-            console.log(`Player added: ${name} (${id}), rocket: ${rocketType}`);
-        }
+        // Add to players object
+        players[id] = {
+            id: id,
+            name: name,
+            isHost: isPlayerHost,
+            rocketType: rocketType || 'blue',
+            x: 0,
+            y: 0,
+            targetX: 0,
+            targetY: 0,
+            speed: 5,
+            rotation: 0,
+            isMoving: false,
+            fuel: 100,
+            maxFuel: 100,
+            inventory: {},
+            contributions: { energy: 0, water: 0, organic: 0, mineral: 0 } // Track contributions
+        };
         
-        // If this is the current player, set the currentPlayer reference
-        if (id === currentPlayerId) {
-            currentPlayer = players[id];
-            console.log("Current player reference set:", currentPlayer);
-            
-            // If current player doesn’t have a position yet, initialize it
-            if (currentPlayer.x === 0 && currentPlayer.y === 0) {
-                currentPlayer.x = galaxyCenterX + (Math.random() - 0.5) * galaxyRadius * 0.5;
-                currentPlayer.y = galaxyCenterY + (Math.random() - 0.5) * galaxyRadius * 0.5;
-                currentPlayer.targetX = currentPlayer.x;
-                currentPlayer.targetY = currentPlayer.y;
-                
-                console.log("Initialized current player position:", currentPlayer.x, currentPlayer.y);
-            }
-        }
-        
-        // Update the player list in the UI
+        // Update the UI
         updatePlayerList();
-        
-        // Debug - log all players
-        console.log(`Total players: ${Object.keys(players).length}`);
     }
     
-    // Remove a player from the list
+    // Remove a player
     function removePlayer(id) {
         if (players[id]) {
-            console.log(`Player removed: ${players[id].name} (${id})`);
             delete players[id];
             updatePlayerList();
         }
@@ -403,7 +342,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updatePlayerList() {
         playerList.innerHTML = '';
         
-        Object.values(players).forEach(player => { // Use Object.values to iterate over players
+        Object.values(players).forEach(player => {
             const li = document.createElement('li');
             
             // Create rocket icon
@@ -445,155 +384,79 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Start the game
     function startGame() {
-        if (isHost && socket && socket.connected) {
-            socket.emit('startGame');
-        }
-        // Simulation mode removed
-    }
-
-    // Add socket event listener for game start
-    if (socket) {
-        socket.on('startGame', () => {
-            handleGameStart();
-        });
-    }
-
-    function handleGameStart() {
-        console.log("Game starting...");
-        
-        gameStarted = true;
-        switchScreen('waitingRoomScreen', 'gameScreen');
-        
-        // Initialize game components
-        initializeGameComponents();
-        
-        // Make sure currentPlayer is properly set before starting animation
-        if (currentPlayerId && players[currentPlayerId]) {
-            currentPlayer = players[currentPlayerId];
-            console.log("Current player set in handleGameStart:", currentPlayer.name);
-            
-            // Center camera on player initially
-            cameraX = currentPlayer.x;
-            cameraY = currentPlayer.y;
-            
-            // Update player speed for faster movement
-            currentPlayer.speed = 8;
-        } else {
-            console.warn("Current player not found when starting game!");
+        if (!isHost && !isGameStarted) {
+            showSystemMessage('Only the host can start the game.', 3000);
+            return;
         }
         
-        // Start the animation loop
-        console.log("Starting animation loop");
-        animationLoop();
+        // Switch to game screen
+        switchScreen(waitingRoomScreen, gameScreen);
         
-        // Force a redraw after a short delay to ensure everything is visible
-        setTimeout(() => {
-            console.log("Forcing redraw after game start");
-            drawPlayers();
-        }, 500);
-    }
-
-    function initializeGameComponents() {
+        // Initialize game elements
         initializeGalaxy();
+        initializePlayerPosition();
         initializeHubProgress();
         initializeCosmicNexusCore();
-        enhanceResponsiveLayout();
-        initializePlayerPosition();
-        setupControlButtons();
-        setupTabletLayout();
-        setupTouchControls();
+        
+        // Start animation loop
         animationLoop();
+        
+        // Mark game as started
+        isGameStarted = true;
+        
+        // Emit to server that the game has started
+        if (isConnected && isHost) {
+            socket.emit('startGame');
+        }
     }
     
-    // Fix the switchScreen function to handle missing elements
+    // Switch between screens
     function switchScreen(fromScreen, toScreen) {
-        // Safely get elements and check if they exist
-        const fromElement = document.getElementById(fromScreen);
-        const toElement = document.getElementById(toScreen);
-        
-        // Only try to remove class if element exists
-        if (fromElement) {
-            fromElement.classList.remove('active');
-        } else {
-            console.warn(`Screen element with ID "${fromScreen}" not found`);
-        }
-        
-        // Only try to add class if element exists
-        if (toElement) {
-            toElement.classList.add('active');
-        } else {
-            console.error(`Screen element with ID "${toScreen}" not found`);
-            // If target screen wasn't found, this is a critical error
-            // Try to show a helpful message to the user
-            showSystemMessage("Error switching screens. Please refresh the page.");
-        }
+        fromScreen.classList.remove('active');
+        toScreen.classList.add('active');
     }
     
     // Initialize the Galactic Hub progress display
     function initializeHubProgress() {
-        // Define the toggleButtonHTML variable first before using it
-        const toggleButtonHTML = '<button class="toggle-hub-btn">▼</button>';
-        
-        // Create hub progress container if it doesn't exist
-        if (!document.querySelector('.hub-progress')) {
-            const hubProgressHTML = `
-                <div class="hub-progress">
-                    ${toggleButtonHTML}
-                    <h3>Hub Construction Progress</h3>
-                    <div class="hub-visual-modules">
-                        <div class="hub-module" data-module="energy">
-                            <div class="module-icon energy-icon"></div>
-                            <div class="module-fill"></div>
+        const resourceGoalsDiv = document.getElementById('resourceGoals');
+        resourceGoalsDiv.innerHTML = '';
+
+        for (const [resourceType, goal] of Object.entries(hubGoals)) {
+            const resourceGoalDiv = document.createElement('div');
+            resourceGoalDiv.className = 'resource-goal';
+            resourceGoalDiv.innerHTML = `
+                <div class="resource-goal-label">
+                    <span>${resourceType.charAt(0).toUpperCase() + resourceType.slice(1)}</span>
+                    <span id="${resourceType}-progress">${goal.current}/${goal.target}</span>
                 </div>
-                        <div class="hub-module" data-module="water">
-                            <div class="module-icon water-icon"></div>
-                            <div class="module-fill"></div>
-                </div>
-                        <div class="hub-module" data-module="core">
-                            <div class="module-icon core-icon"></div>
-                            <div class="module-fill"></div>
-                </div>
-                        <div class="hub-module" data-module="organic">
-                            <div class="module-icon organic-icon"></div>
-                            <div class="module-fill"></div>
-                        </div>
-                        <div class="hub-module" data-module="mineral">
-                            <div class="module-icon mineral-icon"></div>
-                            <div class="module-fill"></div>
-                        </div>
-                    </div>
-                    <div id="resourceGoals"></div>
-                    <div class="hub-objective">
-                        <p>Cooperate with other players to build the galactic hub. Each player contributes resources from their discoveries.</p>
-                    </div>
-                    <div class="contribution-tracking">
-                        <h4>Team Contributions</h4>
-                        <div class="player-contributions" id="playerContributions"></div>
-                    </div>
+                <div class="resource-goal-progress">
+                    <div class="resource-goal-bar" id="${resourceType}-bar" style="width: 0%; background-color: ${goal.color};"></div>
                 </div>
             `;
-            
-            document.querySelector('.game-interface').insertAdjacentHTML('beforeend', hubProgressHTML);
-            
-            // Initialize empty progress data
-            resourceGoals = {
-                energy: { required: 100, current: 0 },
-                water: { required: 100, current: 0 },
-                organic: { required: 100, current: 0 },
-                mineral: { required: 100, current: 0 }
-            };
-            
-            // Update the display
-            updateHubProgress();
-            
-            // Add toggle functionality
-            const toggleBtn = document.querySelector('.toggle-hub-btn');
-            const hubProgress = document.querySelector('.hub-progress');
-            
-            toggleBtn.addEventListener('click', () => {
-                hubProgress.classList.toggle('collapsed');
-                toggleBtn.textContent = hubProgress.classList.contains('collapsed') ? '▲' : '▼';
-            });
+            resourceGoalsDiv.appendChild(resourceGoalDiv);
+        }
+
+        playerContributions = {};
+        updatePlayerContributionsDisplay();
+        resetHubModules();
+        
+        // Add the collaboration panel toggle for small screens
+        const gameScreen = document.getElementById('gameScreen');
+        if (!document.getElementById('toggleCollaborationPanel')) {
+            gameScreen.insertAdjacentHTML('beforeend', toggleButtonHTML);
+            document.getElementById('toggleCollaborationPanel').addEventListener('click', toggleCollaborationPanel);
+        }
+        
+        // Add control overlay for all devices
+        if (!document.getElementById('controlsOverlay')) {
+            gameScreen.insertAdjacentHTML('beforeend', controlsOverlayHTML);
+            setupControlButtons();
+        }
+        
+        // Detect touch devices
+        if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+            document.body.classList.add('touch-device');
+            setupTouchControls();
         }
     }
     
@@ -602,40 +465,46 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Update the contributeToHub function to track individual contributions
     function contributeToHub(resourceType, amount) {
-        if (!hubGoals[resourceType]) return false;
-
-        const currentPlayer = players[currentPlayerId];
-        if (!currentPlayer) {
-            console.error(`Current player not found for ID: ${currentPlayerId}`);
-            // Fallback: Create a temporary player entry if missing
-            players[currentPlayerId] = {
-                id: currentPlayerId,
-                name: currentPlayerName,
-                isHost: isHost,
-                rocketType: selectedRocketType,
-                contributions: {}
-            };
+        // Ensure the player has enough resources
+        if (!player.inventory[resourceType] || player.inventory[resourceType] < amount) {
+            showSystemMessage('Not enough ' + resourceType + ' resources!', 3000);
+            return false;
         }
-
-        // Proceed with contribution
-        hubGoals[resourceType].current = Math.min(hubGoals[resourceType].target, hubGoals[resourceType].current + amount);
+        
+        // Deduct from player inventory
+        player.inventory[resourceType] -= amount;
+        
+        // Add to player's contribution record
+        player.contributions[resourceType] += amount;
+        
+        // Add to hub resources
         galacticHub.contributedResources[resourceType] += amount;
         
-        if (!players[currentPlayerId].contributions) {
-            players[currentPlayerId].contributions = {};
-        }
-        if (!players[currentPlayerId].contributions[resourceType]) {
-            players[currentPlayerId].contributions[resourceType] = 0;
-        }
-        players[currentPlayerId].contributions[resourceType] += amount;
-
-        console.log(`Contributing ${amount} ${resourceType}. New total: ${hubGoals[resourceType].current}/${hubGoals[resourceType].target}`);
+        // Update module fill visuals
+        updateModuleFill(resourceType, galacticHub.contributedResources[resourceType] / galacticHub.requiredResources[resourceType] * 100);
         
+        // Update progress display
         updateHubProgress();
+        
+        // Update player contributions display
         updatePlayerContributionsDisplay();
-        updateCollaborationPanel();
-        showSystemMessage(`${currentPlayerName} contributed ${amount} ${resourceType} to the Galactic Hub!`);
+        
+        // Show a system message
+        showSystemMessage(`You contributed ${amount} ${resourceType} to the Galactic Hub!`, 3000);
+        
+        // Highlight the contribution
+        highlightPlayerContribution(currentPlayerId);
+        
+        // Check if the hub is complete
         checkHubCompletion();
+        
+        // Emit to server
+        if (isConnected) {
+            socket.emit('contributeToHub', { 
+                resourceType: resourceType, 
+                amount: amount 
+            });
+        }
 
         return true;
     }
@@ -709,6 +578,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
+    // Function to broadcast contributions to other players using Socket.io
+    function simulateBroadcastContribution(playerId, resourceType, amount) {
+        // Emit the contribution event to the server using Socket.io
+        socket.emit('hubContribution', {
+            playerId: playerId,
+            resourceType: resourceType,
+            amount: amount
+        });
+        
+        // Still highlight the local player's contribution immediately for responsive UI
+        highlightPlayerContribution(playerId);
+    }
+    
     // Function to highlight a player's contribution
     function highlightPlayerContribution(playerId) {
         const contributionElement = document.getElementById(`contribution-${playerId}`);
@@ -719,43 +601,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Function to simulate other players contributing
-    function simulateOtherPlayerContribution() {
-        // Get a random player that isn't the current player
-        const otherPlayers = players.filter(p => p.id !== player.id);
-        if (otherPlayers.length === 0) return;
-        
-        const randomPlayer = otherPlayers[Math.floor(Math.random() * otherPlayers.length)];
-        const resourceTypes = Object.keys(hubGoals);
-        const randomResource = resourceTypes[Math.floor(Math.random() * resourceTypes.length)];
-        const randomAmount = Math.floor(Math.random() * 50) + 10;
-        
-        // Add to player contributions
-        if (!player.contributions) {
-            player.contributions = { energy: 0, water: 0, organic: 0, mineral: 0 };
-        }
-        player.contributions[randomResource] += randomAmount;
-        
-        // Update hub goals
-        hubGoals[randomResource].current += randomAmount;
-        if (hubGoals[randomResource].current > hubGoals[randomResource].target) {
-            hubGoals[randomResource].current = hubGoals[randomResource].target;
-        }
-            
-            // Update displays
-        updateHubProgress();
-        updatePlayerContributionsDisplay();
-        updateCollaborationPanel();
-        
-        // Highlight the contribution
-        highlightPlayerContribution(randomPlayer.id);
-            
-            // Show system message
-        showSystemMessage(`${randomPlayer.name} contributed ${randomAmount} ${randomResource} to the Galactic Hub!`);
-        
-        // Check hub completion
-        checkHubCompletion();
-    }
     
     // Helper function to get rocket color
     function getRocketColor(rocketType) {
@@ -904,66 +749,49 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Add a ping to the map
     function addPing(x, y, message, sender) {
-        const ping = {
-            x: x,
-            y: y,
-            message: message || 'Look here!',
-            sender: sender,
-            timestamp: Date.now(),
-            element: null
-        };
-        
-        // Create ping element
-        const pingElement = document.createElement('div');
-        pingElement.className = 'map-ping';
-        
-        // Set color based on sender's rocket type
-        let color = '#FFFFFF';
-        for (const player of Object.values(players)) {
-            if (player.name === sender) {
-                switch(player.rocketType) {
-                    case 'red':
-                        color = '#FF5252';
-                        break;
-                    case 'blue':
-                        color = '#4682B4';
-                        break;
-                    case 'green':
-                        color = '#4CAF50';
-                        break;
-                    case 'yellow':
-                        color = '#FFD700';
-                        break;
-                }
-                break;
-            }
-        }
-        
-        pingElement.style.backgroundColor = color;
-        pingElement.style.borderColor = color;
-        
-        // Create label
-        const label = document.createElement('div');
-        label.className = 'ping-label';
-        label.textContent = `${sender}: ${ping.message}`;
-        pingElement.appendChild(label);
-        
-        // Position ping
-        updatePingPosition(ping, pingElement);
-        
-        // Add to document
-        gameScreen.appendChild(pingElement);
-        
-        // Store element reference
-        ping.element = pingElement;
+        // Create a unique ID for the ping
+        const pingId = Date.now().toString();
         
         // Add to pings array
-        pings.push(ping);
+        pings.push({
+            id: pingId,
+            x: x,
+            y: y,
+            message: message,
+            sender: sender,
+            timestamp: Date.now()
+        });
         
-        // Remove ping after 10 seconds
+        // Create ping visual element
+        const pingElement = document.createElement('div');
+        pingElement.className = 'map-ping';
+        pingElement.id = 'ping-' + pingId;
+        document.querySelector('.game-interface').appendChild(pingElement);
+        
+        // If message provided, add ping label
+        if (message) {
+            const pingLabel = document.createElement('div');
+            pingLabel.className = 'ping-label';
+            pingLabel.textContent = `${sender}: ${message}`;
+            pingElement.appendChild(pingLabel);
+        }
+        
+        // Position the ping
+        updatePingPosition(pings[pings.length - 1], pingElement);
+        
+        // Auto-remove ping after a while
         setTimeout(() => {
-            removePing(ping);
-        }, 10000);
+            removePing(pings.find(p => p.id === pingId));
+        }, 10000); // 10 seconds
+        
+        // Emit to server if this is a locally created ping
+        if (sender === currentPlayerName && isConnected) {
+            socket.emit('addPing', { 
+                x: x, 
+                y: y, 
+                message: message 
+            });
+        }
     }
     
     // Update ping position based on camera and zoom
@@ -1029,6 +857,24 @@ document.addEventListener('DOMContentLoaded', () => {
     let hoveredStar = null;
     let hoveredResourceIndicator = null; // Track hovered resource indicator
     let activeExploreButtonStar = null; // Track which star has an active explore button
+    
+    // Player rocket
+    const player = {
+        x: 0,
+        y: 0,
+        targetX: 0,
+        targetY: 0,
+        speed: 5,
+        size: 30,
+        rotation: 0,
+        isMoving: false,
+        fuel: 100,
+        maxFuel: 100,
+        rocketType: 'blue', // Default rocket type
+        inventory: {}, // Add inventory to track resources
+        chosenResource: null, // New property to track chosen resource per star
+        currentStar: null     // New property to track which star the player is at
+    };
     
     // Star systems (galaxy structure)
     const starSystems = [];
@@ -1615,10 +1461,30 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Draw player rocket
     function drawPlayer() {
+        // Draw all other players first
+        drawOtherPlayers();
+        
+        // Then draw current player's rocket (main player)
+        drawPlayerRocket(player, true);
+    }
+    
+    // New function to draw all other players' rockets
+    function drawOtherPlayers() {
+        Object.values(players).forEach(otherPlayer => {
+            // Skip the current player as we'll draw them separately
+            if (otherPlayer.id === currentPlayerId) return;
+            
+            // Draw the other player's rocket
+            drawPlayerRocket(otherPlayer, false);
+        });
+    }
+    
+    // Modified function to draw a player rocket (current or other)
+    function drawPlayerRocket(playerObj, isCurrentPlayer) {
         // Calculate screen position
-        const screenX = (player.x - cameraX) * zoom + worldWidth / 2;
-        const screenY = (player.y - cameraY) * zoom + worldHeight / 2;
-        const scaledSize = player.size * zoom;
+        const screenX = (playerObj.x - cameraX) * zoom + worldWidth / 2;
+        const screenY = (playerObj.y - cameraY) * zoom + worldHeight / 2;
+        const scaledSize = (isCurrentPlayer ? player.size : playerObj.size || player.size) * zoom;
         
         // Skip if off screen
         if (screenX + scaledSize < 0 || screenX - scaledSize > worldWidth ||
@@ -1630,15 +1496,19 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.save();
         
         // Draw player name tag (before rotation so it stays upright)
+        if (isCurrentPlayer) {
         drawPlayerNameTag(screenX, screenY, scaledSize);
+        } else {
+            drawOtherPlayerNameTag(playerObj, screenX, screenY, scaledSize);
+        }
         
         // Translate to rocket position and rotate
         ctx.translate(screenX, screenY);
-        ctx.rotate(player.rotation);
+        ctx.rotate(playerObj.rotation);
         
         // Get rocket color based on type
         let rocketColor;
-        switch(currentPlayer.rocketType) {
+        switch(playerObj.rocketType) {
             case 'red':
                 rocketColor = '#FF5252';
                 break;
@@ -1657,258 +1527,236 @@ document.addEventListener('DOMContentLoaded', () => {
         // Draw rocket with more realistic details
         
         // Engine flames if moving
-        if (player.isMoving) {
+        if (playerObj.isMoving) {
             // Main engine flame
             const flameLength = scaledSize * (0.7 + Math.random() * 0.3); // Randomize flame length for effect
             
             // Gradient for flame
             const flameGradient = ctx.createLinearGradient(0, scaledSize * 0.6, 0, scaledSize * 0.6 + flameLength);
             flameGradient.addColorStop(0, '#FFFFFF');
-            flameGradient.addColorStop(0.3, '#FFA500');
-            flameGradient.addColorStop(0.6, '#FF4500');
+            flameGradient.addColorStop(0.3, '#FFDD00');
+            flameGradient.addColorStop(0.6, '#FF9900');
             flameGradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
             
-            ctx.fillStyle = flameGradient;
+            // Draw the flame
             ctx.beginPath();
             ctx.moveTo(-scaledSize * 0.2, scaledSize * 0.6);
-            ctx.quadraticCurveTo(0, scaledSize * 0.6 + flameLength * 1.5, scaledSize * 0.2, scaledSize * 0.6);
-            ctx.closePath();
+            ctx.lineTo(0, scaledSize * 0.6 + flameLength);
+            ctx.lineTo(scaledSize * 0.2, scaledSize * 0.6);
+            ctx.fillStyle = flameGradient;
             ctx.fill();
             
-            // Side thruster flames (smaller)
-            const sideFlameLength = scaledSize * 0.3 * (0.7 + Math.random() * 0.3);
+            // Small side thrusters
+            const sideThrustLength = scaledSize * 0.3 * (0.5 + Math.random() * 0.5);
             
             // Left thruster
-            ctx.fillStyle = '#FFA500';
+            const leftThrustGradient = ctx.createLinearGradient(-scaledSize * 0.3, scaledSize * 0.3, -scaledSize * 0.3 - sideThrustLength, scaledSize * 0.3);
+            leftThrustGradient.addColorStop(0, '#FFFFFF');
+            leftThrustGradient.addColorStop(0.5, '#FFAA00');
+            leftThrustGradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+            
             ctx.beginPath();
-            ctx.moveTo(-scaledSize * 0.35, scaledSize * 0.4);
-            ctx.lineTo(-scaledSize * 0.5, scaledSize * 0.4 + sideFlameLength);
+            ctx.moveTo(-scaledSize * 0.3, scaledSize * 0.2);
+            ctx.lineTo(-scaledSize * 0.3 - sideThrustLength, scaledSize * 0.3);
             ctx.lineTo(-scaledSize * 0.3, scaledSize * 0.4);
-            ctx.closePath();
+            ctx.fillStyle = leftThrustGradient;
             ctx.fill();
             
             // Right thruster
+            const rightThrustGradient = ctx.createLinearGradient(scaledSize * 0.3, scaledSize * 0.3, scaledSize * 0.3 + sideThrustLength, scaledSize * 0.3);
+            rightThrustGradient.addColorStop(0, '#FFFFFF');
+            rightThrustGradient.addColorStop(0.5, '#FFAA00');
+            rightThrustGradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+            
             ctx.beginPath();
-            ctx.moveTo(scaledSize * 0.35, scaledSize * 0.4);
-            ctx.lineTo(scaledSize * 0.5, scaledSize * 0.4 + sideFlameLength);
+            ctx.moveTo(scaledSize * 0.3, scaledSize * 0.2);
+            ctx.lineTo(scaledSize * 0.3 + sideThrustLength, scaledSize * 0.3);
             ctx.lineTo(scaledSize * 0.3, scaledSize * 0.4);
-            ctx.closePath();
+            ctx.fillStyle = rightThrustGradient;
             ctx.fill();
         }
         
-        // Main rocket body - using selected rocket color
-        ctx.fillStyle = rocketColor;
+        // Draw rocket body
         ctx.beginPath();
-        ctx.moveTo(0, -scaledSize * 0.7); // Nose
-        ctx.bezierCurveTo(
-            scaledSize * 0.3, -scaledSize * 0.5, // Control point 1
-            scaledSize * 0.3, scaledSize * 0.3,  // Control point 2
-            scaledSize * 0.25, scaledSize * 0.6   // End point (bottom right)
-        );
-        ctx.lineTo(-scaledSize * 0.25, scaledSize * 0.6); // Bottom left
-        ctx.bezierCurveTo(
-            -scaledSize * 0.3, scaledSize * 0.3,  // Control point 1
-            -scaledSize * 0.3, -scaledSize * 0.5, // Control point 2
-            0, -scaledSize * 0.7                 // Back to nose
-        );
+        ctx.moveTo(0, -scaledSize * 0.6); // Nose
+        ctx.lineTo(scaledSize * 0.4, scaledSize * 0.4); // Right bottom corner
+        ctx.lineTo(scaledSize * 0.2, scaledSize * 0.4); // Right bottom indentation
+        ctx.lineTo(0, scaledSize * 0.6); // Bottom center
+        ctx.lineTo(-scaledSize * 0.2, scaledSize * 0.4); // Left bottom indentation
+        ctx.lineTo(-scaledSize * 0.4, scaledSize * 0.4); // Left bottom corner
         ctx.closePath();
+        
+        // Shadow for depth
+        const gradient = ctx.createLinearGradient(-scaledSize * 0.4, 0, scaledSize * 0.4, 0);
+        gradient.addColorStop(0, darkenColor(rocketColor, 30));
+        gradient.addColorStop(0.5, rocketColor);
+        gradient.addColorStop(1, darkenColor(rocketColor, 30));
+        
+        ctx.fillStyle = gradient;
         ctx.fill();
         
-        // Add shading to give 3D effect
-        const bodyGradient = ctx.createLinearGradient(-scaledSize * 0.25, 0, scaledSize * 0.25, 0);
-        // Create a lighter and darker version of the rocket color for the gradient
-        const lighterColor = lightenColor(rocketColor, 30);
-        const darkerColor = darkenColor(rocketColor, 30);
-        
-        bodyGradient.addColorStop(0, darkerColor);
-        bodyGradient.addColorStop(0.5, lighterColor);
-        bodyGradient.addColorStop(1, darkerColor);
-        
-        ctx.fillStyle = bodyGradient;
+        // Cockpit/window
         ctx.beginPath();
-        ctx.moveTo(0, -scaledSize * 0.65); // Slightly below nose
-        ctx.bezierCurveTo(
-            scaledSize * 0.25, -scaledSize * 0.5,
-            scaledSize * 0.25, scaledSize * 0.3,
-            scaledSize * 0.2, scaledSize * 0.55
-        );
-        ctx.lineTo(-scaledSize * 0.2, scaledSize * 0.55);
-        ctx.bezierCurveTo(
-            -scaledSize * 0.25, scaledSize * 0.3,
-            -scaledSize * 0.25, -scaledSize * 0.5,
-            0, -scaledSize * 0.65
-        );
-        ctx.closePath();
+        ctx.ellipse(0, -scaledSize * 0.2, scaledSize * 0.2, scaledSize * 0.3, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(200, 230, 255, 0.8)';
+        ctx.fill();
+        ctx.strokeStyle = '#AAAAAA';
+        ctx.lineWidth = scaledSize * 0.05;
+        ctx.stroke();
+        
+        // Wing/fin details
+        ctx.beginPath();
+        ctx.moveTo(-scaledSize * 0.4, scaledSize * 0.4); // Left bottom corner
+        ctx.lineTo(-scaledSize * 0.6, scaledSize * 0.2); // Left wing tip
+        ctx.lineTo(-scaledSize * 0.3, scaledSize * 0.1); // Connect back to body
+        ctx.fillStyle = lightenColor(rocketColor, 20);
         ctx.fill();
         
-        // Cockpit window - blue with reflection
-        const windowGradient = ctx.createRadialGradient(
-            scaledSize * 0.05, -scaledSize * 0.3, 0,
-            scaledSize * 0.05, -scaledSize * 0.3, scaledSize * 0.2
-        );
-        windowGradient.addColorStop(0, '#FFFFFF');
-        windowGradient.addColorStop(0.2, '#87CEEB');
-        windowGradient.addColorStop(1, '#4682B4');
-        
-        ctx.fillStyle = windowGradient;
         ctx.beginPath();
-        ctx.ellipse(0, -scaledSize * 0.3, scaledSize * 0.15, scaledSize * 0.1, 0, 0, Math.PI * 2);
+        ctx.moveTo(scaledSize * 0.4, scaledSize * 0.4); // Right bottom corner
+        ctx.lineTo(scaledSize * 0.6, scaledSize * 0.2); // Right wing tip
+        ctx.lineTo(scaledSize * 0.3, scaledSize * 0.1); // Connect back to body
+        ctx.fillStyle = lightenColor(rocketColor, 20);
         ctx.fill();
         
-        // Wing details
-        ctx.fillStyle = '#B0B0B0';
-        
-        // Left wing
+        // Engine details
         ctx.beginPath();
-        ctx.moveTo(-scaledSize * 0.25, scaledSize * 0.2);
-        ctx.lineTo(-scaledSize * 0.5, scaledSize * 0.4);
-        ctx.lineTo(-scaledSize * 0.25, scaledSize * 0.5);
-        ctx.closePath();
-        ctx.fill();
-        
-        // Right wing
-        ctx.beginPath();
-        ctx.moveTo(scaledSize * 0.25, scaledSize * 0.2);
-        ctx.lineTo(scaledSize * 0.5, scaledSize * 0.4);
-        ctx.lineTo(scaledSize * 0.25, scaledSize * 0.5);
-        ctx.closePath();
-        ctx.fill();
-        
-        // Engine section
-        ctx.fillStyle = '#707070';
-        ctx.beginPath();
-        ctx.rect(-scaledSize * 0.25, scaledSize * 0.5, scaledSize * 0.5, scaledSize * 0.1);
-        ctx.fill();
-        
-        // Engine nozzle
-        ctx.fillStyle = '#505050';
-        ctx.beginPath();
-        ctx.moveTo(-scaledSize * 0.2, scaledSize * 0.6);
+        ctx.moveTo(-scaledSize * 0.2, scaledSize * 0.4);
+        ctx.lineTo(-scaledSize * 0.2, scaledSize * 0.6);
         ctx.lineTo(scaledSize * 0.2, scaledSize * 0.6);
-        ctx.lineTo(scaledSize * 0.15, scaledSize * 0.7);
-        ctx.lineTo(-scaledSize * 0.15, scaledSize * 0.7);
-        ctx.closePath();
+        ctx.lineTo(scaledSize * 0.2, scaledSize * 0.4);
+        ctx.fillStyle = '#555555';
         ctx.fill();
         
-        // Detail lines for panels and structure
-        ctx.strokeStyle = '#808080';
-        ctx.lineWidth = Math.max(1, scaledSize * 0.02);
-        
-        // Body panel lines
+        // Add a light highlight/reflection
         ctx.beginPath();
-        ctx.moveTo(0, -scaledSize * 0.7);
-        ctx.lineTo(0, scaledSize * 0.5);
-        ctx.stroke();
-        
-        ctx.beginPath();
-        ctx.moveTo(-scaledSize * 0.15, -scaledSize * 0.5);
-        ctx.lineTo(-scaledSize * 0.15, scaledSize * 0.3);
-        ctx.stroke();
-        
-        ctx.beginPath();
-        ctx.moveTo(scaledSize * 0.15, -scaledSize * 0.5);
-        ctx.lineTo(scaledSize * 0.15, scaledSize * 0.3);
-        ctx.stroke();
-        
-        // Wing detail lines
-        ctx.beginPath();
-        ctx.moveTo(-scaledSize * 0.25, scaledSize * 0.3);
-        ctx.lineTo(-scaledSize * 0.4, scaledSize * 0.4);
-        ctx.stroke();
-        
-        ctx.beginPath();
-        ctx.moveTo(scaledSize * 0.25, scaledSize * 0.3);
-        ctx.lineTo(scaledSize * 0.4, scaledSize * 0.4);
-        ctx.stroke();
+        ctx.moveTo(0, -scaledSize * 0.6); // Nose
+        ctx.lineTo(scaledSize * 0.1, -scaledSize * 0.3); // Right
+        ctx.lineTo(0, 0); // Middle
+        ctx.lineTo(-scaledSize * 0.1, -scaledSize * 0.3); // Left
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.fill();
         
         // Restore context state
         ctx.restore();
         
-        // Draw fuel gauge above the rocket
-        const fuelWidth = scaledSize * 1.5;
-        const fuelHeight = scaledSize / 6;
-        const fuelX = screenX - fuelWidth / 2;
-        const fuelY = screenY - scaledSize * 1.5;
-        
-        // Fuel background with border
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        ctx.fillRect(fuelX, fuelY, fuelWidth, fuelHeight);
-        ctx.strokeStyle = '#555555';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(fuelX, fuelY, fuelWidth, fuelHeight);
-        
-        // Fuel level with gradient
-        const fuelLevel = (currentPlayer.fuel / currentPlayer.maxFuel) * fuelWidth;
-        let fuelGradient;
-        
-        if (player.fuel > 70) {
-            // Green gradient for high fuel
-            fuelGradient = ctx.createLinearGradient(fuelX, fuelY, fuelX + fuelLevel, fuelY);
-            fuelGradient.addColorStop(0, '#00FF00');
-            fuelGradient.addColorStop(1, '#00AA00');
-        } else if (player.fuel > 30) {
-            // Yellow gradient for medium fuel
-            fuelGradient = ctx.createLinearGradient(fuelX, fuelY, fuelX + fuelLevel, fuelY);
-            fuelGradient.addColorStop(0, '#FFFF00');
-            fuelGradient.addColorStop(1, '#FFA500');
-        } else {
-            // Red gradient for low fuel
-            fuelGradient = ctx.createLinearGradient(fuelX, fuelY, fuelX + fuelLevel, fuelY);
-            fuelGradient.addColorStop(0, '#FF0000');
-            fuelGradient.addColorStop(1, '#AA0000');
+        // Draw fuel indicator if it's the current player
+        if (isCurrentPlayer) {
+            // Fuel bar background
+            const fuelBarWidth = scaledSize * 3;
+            const fuelBarHeight = scaledSize * 0.3;
+            const fuelBarX = screenX - fuelBarWidth / 2;
+            const fuelBarY = screenY + scaledSize + 10;
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            roundRect(ctx, fuelBarX, fuelBarY, fuelBarWidth, fuelBarHeight, 3, true, false);
+            
+            // Fuel level
+            const fuelLevel = Math.max(0, playerObj.fuel / playerObj.maxFuel);
+            const fuelWidth = fuelBarWidth * fuelLevel;
+            
+            // Get color based on fuel level
+            let fuelColor;
+            if (fuelLevel > 0.6) {
+                fuelColor = '#4CAF50'; // Green
+            } else if (fuelLevel > 0.3) {
+                fuelColor = '#FFC107'; // Yellow/amber
+            } else {
+                fuelColor = '#F44336'; // Red
+            }
+            
+            ctx.fillStyle = fuelColor;
+            roundRect(ctx, fuelBarX, fuelBarY, fuelWidth, fuelBarHeight, 3, true, false);
+            
+            // Fuel text
+            const fuelPercent = Math.floor(fuelLevel * 100);
+            const fuelText = `Fuel: ${fuelPercent}%`;
+            const textX = screenX;
+            const textY = fuelBarY + fuelBarHeight + 15;
+            
+            ctx.font = `bold ${Math.max(12, 14 * zoom)}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // Text outline for better visibility
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 3;
+            ctx.strokeText(fuelText, textX, textY);
+            
+            // Text fill
+            ctx.fillStyle = 'white';
+            ctx.fillText(fuelText, textX, textY);
         }
-        
-        ctx.fillStyle = fuelGradient;
-        ctx.fillRect(fuelX, fuelY, fuelLevel, fuelHeight);
-        
-        // Add fuel text with improved readability
-        // First draw a dark outline/shadow for the text
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-        ctx.font = `bold ${Math.max(10, Math.floor(fuelHeight * 0.8))}px Arial`;
+    }
+    
+    // Function to draw name tag for other players' rockets
+    function drawOtherPlayerNameTag(playerObj, x, y, size) {
+        const nameY = y - size - 10;
+        ctx.font = `bold ${Math.max(12, 14 * zoom)}px Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         
+        // Determine player name color based on rocket type
+        let nameColor;
+        switch(playerObj.rocketType) {
+            case 'red':
+                nameColor = '#FF5252';
+                break;
+            case 'green':
+                nameColor = '#4CAF50';
+                break;
+            case 'yellow':
+                nameColor = '#FFD700';
+                break;
+            case 'blue':
+            default:
+                nameColor = '#4682B4';
+                break;
+        }
+        
         // Draw text outline by offsetting in multiple directions
-        const fuelText = `FUEL: ${Math.floor(currentPlayer.fuel)}%`;
-        const textX = fuelX + fuelWidth / 2;
-        const textY = fuelY + fuelHeight / 2;
-        const outlineWidth = 2;
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 3;
+        ctx.strokeText(playerObj.name, x, nameY);
         
-        // Draw the text outline
-        ctx.fillText(fuelText, textX - outlineWidth, textY - outlineWidth);
-        ctx.fillText(fuelText, textX + outlineWidth, textY - outlineWidth);
-        ctx.fillText(fuelText, textX - outlineWidth, textY + outlineWidth);
-        ctx.fillText(fuelText, textX + outlineWidth, textY + outlineWidth);
-        
-        // Draw the main text in white
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(fuelText, textX, textY);
+        // Text fill
+        ctx.fillStyle = nameColor;
+        ctx.fillText(playerObj.name, x, nameY);
     }
     
     // Update player position (move towards target)
     function updatePlayerPosition() {
-        if (currentPlayer.isMoving) {
+        if (player.isMoving) {
             // Calculate direction to target
-            const dx = currentPlayer.targetX - currentPlayer.x;
-            const dy = currentPlayer.targetY - currentPlayer.y;
+            const dx = player.targetX - player.x;
+            const dy = player.targetY - player.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
             // Update rotation to face target
-            currentPlayer.rotation = Math.atan2(dy, dx) + Math.PI / 2;
+            player.rotation = Math.atan2(dy, dx) + Math.PI / 2;
             
             // If close to target, stop moving
-            if (distance < currentPlayer.speed) {
-                currentPlayer.x = currentPlayer.targetX;
-                currentPlayer.y = currentPlayer.targetY;
-                currentPlayer.isMoving = false;
-            return;
-        }
-
+            if (distance < player.speed) {
+                player.x = player.targetX;
+                player.y = player.targetY;
+                player.isMoving = false;
+                
+                // Emit to server that the player has stopped
+                if (isConnected) {
+                    socket.emit('playerStopMove', { 
+                        position: { x: player.x, y: player.y } 
+                    });
+                }
+                
+                return;
+            }
+            
             // Calculate next position
-            const moveX = (dx / distance) * currentPlayer.speed;
-            const moveY = (dy / distance) * currentPlayer.speed;
-            const nextX = currentPlayer.x + moveX;
-            const nextY = currentPlayer.y + moveY;
+            const moveX = (dx / distance) * player.speed;
+            const moveY = (dy / distance) * player.speed;
+            const nextX = player.x + moveX;
+            const nextY = player.y + moveY;
             
             // Check if next position would collide with any star
             let collision = false;
@@ -1928,52 +1776,61 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             if (collision) {
-                currentPlayer.isMoving = false;
+                player.isMoving = false;
                 showExploreButton(collidedStar);
+                
+                // Emit to server that the player has stopped
+                if (isConnected) {
+                    socket.emit('playerStopMove', { 
+                        position: { x: player.x, y: player.y } 
+                    });
+                }
             } else {
                 // Move towards target if no collision
-                currentPlayer.x = nextX;
-                currentPlayer.y = nextY;
+                player.x = nextX;
+                player.y = nextY;
                 
-                // Consume fuel
-                currentPlayer.fuel = Math.max(0, currentPlayer.fuel - 0.1);
+                // Consume fuel when moving
+                player.fuel = Math.max(0, player.fuel - 0.1);
                 
                 // If out of fuel, stop moving
-                if (currentPlayer.fuel <= 0) {
-                    currentPlayer.isMoving = false;
+                if (player.fuel <= 0) {
+                    player.isMoving = false;
+                    
+                    // Emit to server that the player has stopped
+                    if (isConnected) {
+                        socket.emit('playerStopMove', { 
+                            position: { x: player.x, y: player.y } 
+                        });
+                    }
+                } else {
+                    // Emit to server about the new position
+                    if (isConnected) {
+                        socket.emit('playerMove', { 
+                            position: { x: player.x, y: player.y },
+                            velocity: { x: moveX, y: moveY },
+                            direction: player.rotation
+                        });
+                    }
+                    
+                    // Hide explore button when moving
+                    hideExploreButton();
                 }
-                
-                // Center camera on player
-                cameraX = currentPlayer.x;
-                cameraY = currentPlayer.y;
-                
-                // Enforce camera limits
-                enforceCameraLimits();
-                
-                // Hide explore button when moving
-                hideExploreButton();
             }
         }
         
-        // If position changed and we're connected to a server, emit update
-        if (currentPlayer.isMoving && socket && socket.connected) {
-            socket.emit('updatePosition', {
-                x: currentPlayer.x,
-                y: currentPlayer.y
-            });
-        }
-        
-        // Sync with players object
-        if (currentPlayerId && players[currentPlayerId]) {
-            players[currentPlayerId].x = currentPlayer.x;
-            players[currentPlayerId].y = currentPlayer.y;
-            players[currentPlayerId].isMoving = currentPlayer.isMoving;
-            players[currentPlayerId].rotation = currentPlayer.rotation;
-            players[currentPlayerId].visible = true; // Ensure visibility
-            
-            // Keep currentPlayer in sync
-            currentPlayer = players[currentPlayerId];
-        }
+        // Always update camera to follow the player's rocket
+        updateCameraToFollowPlayer();
+    }
+    
+    // New function to keep camera centered on player's rocket
+    function updateCameraToFollowPlayer() {
+        // Update camera position to follow the player
+                cameraX = player.x;
+                cameraY = player.y;
+                
+                // Enforce camera limits
+                enforceCameraLimits();
     }
     
     // Create and show explore button when colliding with a star
@@ -2385,30 +2242,81 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Main render function
     function render() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Clear canvas
+        ctx.clearRect(0, 0, worldWidth, worldHeight);
+        
+        // Draw background
         drawBackground();
+        
+        // Draw star systems with their hexagons
         drawStarSystems();
+        
+        // Draw star system boundaries
         drawStarBoundaries();
-
-        // Update and draw current player
-        if (currentPlayer) {
-            updatePlayerPosition(); // Call the updated function
-            drawPlayer(currentPlayer); // Assuming this draws the player's rocket
-        } else {
-            console.warn("currentPlayer not defined yet in render");
-        }
-
-        // Draw other players
-        drawPlayers();
+        
+        // Update and draw player
+        updatePlayerPosition();
+        drawPlayer();
+        
+        // Draw mini-map
+        drawMiniMap();
+        
+        
+        // Update pan limit indicator
+        updatePanLimitIndicator();
+        
+        // Update ping positions
         updateAllPingPositions();
+        
+        // Update explore button position if active
+        if (activeExploreButtonStar) {
+            updateExploreButtonPosition();
+        }
     }
     
     // Handle window resize
     window.addEventListener('resize', () => {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight - 100;
+        resizeCanvas();
         render();
+        updateLayoutForScreenSize();
     });
+
+    // Add new function for better canvas resizing
+    function resizeCanvas() {
+        const headerHeight = document.querySelector('header') ? document.querySelector('header').offsetHeight : 0;
+        const controlsHeight = document.getElementById('gameControls') ? document.getElementById('gameControls').offsetHeight : 0;
+        
+        // Set canvas dimensions based on available space
+        canvas.width = window.innerWidth;
+        
+        // Calculate height differently based on device type
+        if (isMobileDevice()) {
+            // On mobile, leave more space for controls
+            canvas.height = window.innerHeight - (headerHeight + controlsHeight + 20);
+        } else {
+            // On desktop, use more screen real estate
+            canvas.height = window.innerHeight - (headerHeight + 80);
+        }
+        
+        // Recalculate scale factors for proper rendering
+        scaleFactorX = canvas.width / worldWidth;
+        scaleFactorY = canvas.height / worldHeight;
+        
+        // Update mini-map size
+        miniMapWidth = Math.min(200, window.innerWidth * 0.2);
+        miniMapHeight = Math.min(150, window.innerHeight * 0.2);
+        
+        // Enforce camera limits based on new dimensions
+        enforceCameraLimits();
+    }
+
+    // Add function to detect mobile devices
+    function isMobileDevice() {
+        return (
+            ('ontouchstart' in window || navigator.maxTouchPoints > 0) && 
+            window.innerWidth <= 1024
+        );
+    }
     
     // Mouse down event for panning and selection
     canvas.addEventListener('mousedown', (event) => {
@@ -3230,348 +3138,75 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize galaxy and render
     initializeGalaxy();
     
-        // Add this function before the animationLoop function in hexMap.js
-    function updateMiniMap() {
-        const mapSize = 150; // Size of the mini-map (width and height)
-        const mapX = worldWidth - mapSize - 20; // Position in bottom-right corner with padding
-        const mapY = worldHeight - mapSize - 20;
-        const mapScale = mapSize / (galaxyRadius * 2.5); // Scale factor to fit galaxy in mini-map
-
-        // Draw mini-map background
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(mapX, mapY, mapSize, mapSize);
-        ctx.strokeStyle = '#444444';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(mapX, mapY, mapSize, mapSize);
-
-        // Center of the mini-map in world coordinates
-        const mapCenterX = galaxyCenterX;
-        const mapCenterY = galaxyCenterY;
-
-        // Draw star systems
-        starSystems.forEach(star => {
-            // Convert star position to mini-map coordinates
-            const miniX = mapX + (star.x - mapCenterX) * mapScale + mapSize / 2;
-            const miniY = mapY + (star.y - mapCenterY) * mapScale + mapSize / 2;
-
-            // Only draw if within mini-map bounds
-            if (miniX >= mapX && miniX <= mapX + mapSize && miniY >= mapY && miniY <= mapY + mapSize) {
-                ctx.beginPath();
-                ctx.arc(miniX, miniY, 2, 0, Math.PI * 2); // Small dot for each star
-                ctx.fillStyle = starColors[star.colorIndex][2]; // Use a medium shade from the star's color palette
-                ctx.fill();
-            }
-        });
-
-        // Draw all players
-        Object.values(players).forEach(p => {
-            const miniX = mapX + (p.x - mapCenterX) * mapScale + mapSize / 2;
-            const miniY = mapY + (p.y - mapCenterY) * mapScale + mapSize / 2;
-
-            if (miniX >= mapX && miniX <= mapX + mapSize && miniY >= mapY && miniY <= mapY + mapSize) {
-                ctx.beginPath();
-                ctx.arc(miniX, miniY, 3, 0, Math.PI * 2); // Slightly larger dot for players
-                ctx.fillStyle = getRocketColor(p.rocketType);
-                ctx.fill();
-                ctx.strokeStyle = '#FFFFFF';
-                ctx.lineWidth = 1;
-                ctx.stroke();
-            }
-        });
-
-        // Draw camera view rectangle
-        const viewWidth = worldWidth / zoom;
-        const viewHeight = worldHeight / zoom;
-        const viewMiniX = mapX + (cameraX - viewWidth / 2 - mapCenterX) * mapScale + mapSize / 2;
-        const viewMiniY = mapY + (cameraY - viewHeight / 2 - mapCenterY) * mapScale + mapSize / 2;
-        const viewMiniWidth = viewWidth * mapScale;
-        const viewMiniHeight = viewHeight * mapScale;
-
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(viewMiniX, viewMiniY, viewMiniWidth, viewMiniHeight);
-    }
-
-    // Helper function to get rocket color (reuse from drawPlayers if already defined)
-    function getRocketColor(rocketType) {
-        switch (rocketType) {
-            case 'red': return '#FF5252';
-            case 'blue': return '#4682B4';
-            case 'green': return '#4CAF50';
-            case 'yellow': return '#FFD700';
-            default: return '#FFFFFF';
-        }
-    }
     // Initialize player position in empty space
     function initializePlayerPosition() {
-        if (!currentPlayer) {
-            console.warn("currentPlayer not defined in initializePlayerPosition");
-            return;
-        }
-    
+        // Try to find a safe position for the player
         let safePositionFound = false;
         let attempts = 0;
-        const maxAttempts = 100;
-    
+        const maxAttempts = 100; // Prevent infinite loop
+        
         while (!safePositionFound && attempts < maxAttempts) {
             // Generate a random position within a reasonable distance from center
             const angle = Math.random() * Math.PI * 2;
-            const distance = Math.random() * galaxyRadius * 0.5;
+            const distance = Math.random() * galaxyRadius * 0.5; // Half the galaxy radius
+            
             const testX = galaxyCenterX + Math.cos(angle) * distance;
             const testY = galaxyCenterY + Math.sin(angle) * distance;
-    
+            
             // Check if this position is inside any star
             let insideStar = false;
             for (const star of starSystems) {
                 const dx = testX - star.x;
                 const dy = testY - star.y;
                 const distanceToStar = Math.sqrt(dx * dx + dy * dy);
-                // Use currentPlayer.size instead of player.size
-                if (distanceToStar <= star.radius + currentPlayer.size) {
+                
+                // Add a buffer zone around the star
+                if (distanceToStar <= star.radius + player.size) {
                     insideStar = true;
                     break;
                 }
             }
-    
+            
             // If not inside any star, use this position
             if (!insideStar) {
-                currentPlayer.x = testX;
-                currentPlayer.y = testY;
-                currentPlayer.targetX = testX;
-                currentPlayer.targetY = testY;
+                player.x = testX;
+                player.y = testY;
+                player.targetX = testX;
+                player.targetY = testY;
                 safePositionFound = true;
-    
+                
                 // Center camera on player
-                cameraX = currentPlayer.x;
-                cameraY = currentPlayer.y;
-    
-                // No need to update players[currentPlayerId] separately since currentPlayer is a reference to it
-                currentPlayer.visible = true; // Ensure visibility
+                cameraX = player.x;
+                cameraY = player.y;
             }
-    
+            
             attempts++;
         }
-    
-        // Fallback if no safe position found
+        
+        // Fallback if no safe position found after max attempts
         if (!safePositionFound) {
-            currentPlayer.x = galaxyRadius * 0.75;
-            currentPlayer.y = 0;
-            currentPlayer.targetX = currentPlayer.x;
-            currentPlayer.targetY = currentPlayer.y;
-    
+            // Place player at a fixed safe distance from the center
+            player.x = galaxyRadius * 0.75;
+            player.y = 0;
+            player.targetX = player.x;
+            player.targetY = player.y;
+            
             // Center camera on player
-            cameraX = currentPlayer.x;
-            cameraY = currentPlayer.y;
-    
-            currentPlayer.visible = true; // Ensure visibility
+            cameraX = player.x;
+            cameraY = player.y;
         }
-    
-        // Sync position with server if connected
-        if (socket && socket.connected) {
-            socket.emit('updatePosition', { x: currentPlayer.x, y: currentPlayer.y });
-        }
-    
-        console.log("Player position initialized:", currentPlayer.x, currentPlayer.y);
     }
     
     // Initialize player after galaxy is created
     initializePlayerPosition();
     
     render();
-
-    function drawPlayers() {
-        // Debug - log drawing attempt
-        console.log("Drawing players, count:", Object.keys(players).length);
-        
-        // Define currentPlayer if it's not already defined
-        if (currentPlayerId && players[currentPlayerId] && !currentPlayer) {
-            currentPlayer = players[currentPlayerId];
-            console.log("Set currentPlayer reference in drawPlayers()");
-        }
-        
-        // Check if players object exists and has entries
-        if (!players || Object.keys(players).length === 0) {
-            console.warn("No players to draw!");
-            return;
-        }
-        
-        // Save the context state
-        ctx.save();
-
-        // Draw each player
-        Object.values(players).forEach(p => {
-            // Skip undefined players or those with missing position data
-            if (!p || typeof p.x === 'undefined' || typeof p.y === 'undefined') {
-                console.warn("Player missing or has invalid position:", p);
-                return;
-            }
-            
-            // Convert world coordinates to screen coordinates
-            const screenX = (p.x - cameraX) * zoom + canvas.width / 2;
-            const screenY = (p.y - cameraY) * zoom + canvas.height / 2;
-
-            // Skip if off-screen (with expanded boundaries)
-            if (screenX < -player.size * zoom * 2 || screenX > canvas.width + player.size * zoom * 2 ||
-                screenY < -player.size * zoom * 2 || screenY > canvas.height + player.size * zoom * 2) {
-                return;
-            }
-
-            // Set rocket rotation (default if not available)
-            const rotation = p.rotation || 0;
-            
-            // Save context for transformations
-            ctx.save();
-            ctx.translate(screenX, screenY);
-            ctx.rotate(rotation);
-
-            // Determine rocket color based on type
-            let rocketColor;
-            switch (p.rocketType) {
-                case 'red': rocketColor = '#FF5252'; break;
-                case 'blue': rocketColor = '#4682B4'; break;
-                case 'green': rocketColor = '#4CAF50'; break;
-                case 'yellow': rocketColor = '#FFD700'; break;
-                default: rocketColor = '#FFFFFF'; // Fallback color
-            }
-
-            // Draw rocket (using a simplified triangle shape)
-            const rocketSize = player.size * zoom;
-            ctx.beginPath();
-            ctx.moveTo(0, -rocketSize * 0.5); // Top point
-            ctx.lineTo(-rocketSize * 0.3, rocketSize * 0.5); // Bottom left
-            ctx.lineTo(rocketSize * 0.3, rocketSize * 0.5); // Bottom right
-            ctx.closePath();
-            ctx.fillStyle = rocketColor;
-            ctx.fill();
-            ctx.strokeStyle = '#FFFFFF';
-            ctx.lineWidth = 1 * zoom;
-            ctx.stroke();
-
-            // Draw engine flame if moving
-            if (p.isMoving) {
-                ctx.beginPath();
-                ctx.moveTo(-rocketSize * 0.2, rocketSize * 0.5);
-                ctx.lineTo(0, rocketSize * 0.9);
-                ctx.lineTo(rocketSize * 0.2, rocketSize * 0.5);
-                ctx.closePath();
-                ctx.fillStyle = '#FFA500';
-                ctx.fill();
-            }
-
-            // Restore context after drawing rocket
-            ctx.restore();
-
-            // Draw player name tag
-            const playerName = p.name || `Player ${p.id ? p.id.substring(0, 5) : 'Unknown'}`;
-            drawPlayerNameTag(screenX, screenY, rocketSize, playerName, p.rocketType);
-            
-            // Debug - draw a circle around the player's position for visibility
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, rocketSize * 1.5, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.lineWidth = 1;
-            ctx.stroke();
-        });
-
-        // Log the current player's position for debugging
-        if (currentPlayerId && players[currentPlayerId]) {
-            const cp = players[currentPlayerId];
-            const screenX = (cp.x - cameraX) * zoom + canvas.width / 2;
-            const screenY = (cp.y - cameraY) * zoom + canvas.height / 2;
-            console.log(`Current player (${currentPlayerId}) at screen position: ${Math.round(screenX)}, ${Math.round(screenY)}`);
-        }
-
-        ctx.restore();
-    }
-
-    // Modified drawPlayerNameTag to accept name and rocketType parameters
-    function drawPlayerNameTag(x, y, size, name, rocketType) {
-        if (!name) return;
-
-        ctx.save();
-
-        const fontSize = Math.max(10, Math.min(16, 12 * zoom));
-        ctx.font = `bold ${fontSize}px Arial`;
-
-        const textWidth = ctx.measureText(name).width;
-        const padding = 6 * zoom;
-        const tagWidth = textWidth + (padding * 2);
-        const tagHeight = fontSize + (padding * 1.5);
-
-        const tagX = x + size + (10 * zoom);
-        const tagY = y - (tagHeight / 2);
-
-        let tagColor;
-        switch (rocketType) {
-            case 'red': tagColor = '#FF5252'; break;
-            case 'blue': tagColor = '#4682B4'; break;
-            case 'green': tagColor = '#4CAF50'; break;
-            case 'yellow': tagColor = '#FFD700'; break;
-            default: tagColor = '#4682B4';
-        }
-
-        ctx.fillStyle = tagColor;
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 1.5 * zoom;
-        roundRect(ctx, tagX, tagY, tagWidth, tagHeight, 4 * zoom, true, true);
-
-        ctx.fillStyle = '#FFFFFF';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(name, tagX + (tagWidth / 2), tagY + (tagHeight / 2));
-
-        ctx.beginPath();
-        ctx.moveTo(x + (size * 0.5), y);
-        ctx.lineTo(tagX, tagY + (tagHeight / 2));
-        ctx.stroke();
-
-        ctx.restore();
-    }
     
     // Start animation loop
     function animationLoop() {
-        // Clear canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Draw game elements
-        drawBackground();
-        drawStarSystems();
-        drawStarBoundaries();
-
-        const currentPlayer = players[currentPlayerId];
-
-        // Update and draw all players
-        updatePlayerPosition();
-
-
-        
-        // Make sure currentPlayer is defined and points to the right player object
-        if (currentPlayerId && players[currentPlayerId]) {
-            currentPlayer = players[currentPlayerId];
+        if (player.isMoving) {
+            render();
         }
-        
-        // Draw the current player's rocket
-        if (currentPlayer) {
-            drawPlayer();
-        }
-        
-        // Draw all players' rockets (including other players)
-        drawPlayers();
-        
-        // Draw other UI elements
-        updateAllPingPositions();
-        updateMiniMap();
-        enforceCameraLimits();
-        updatePanLimitIndicator();
-        
-        // Debug information - remove after fixing
-        if (players.length > 0 && !rocketsDebuggedOnce) {
-            console.log("Animation loop - Players:", players);
-            console.log("Animation loop - Current player:", currentPlayer);
-            rocketsDebuggedOnce = true;
-        }
-
-        // Continue animation loop
         requestAnimationFrame(animationLoop);
     }
     animationLoop();
@@ -4287,124 +3922,74 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Function to harvest a specific resource
     function harvestResource(star, resourceType, resourceTypes, parentModal) {
-        // Validation checks
-        if (!star || !resourceType) {
-            console.error("Invalid star or resource type");
-            return 0;
-        }
-
-        // Star switching logic
-        if (player.currentStar !== star) {
-            player.currentStar = star;
-            player.chosenResource = null; // Reset chosen resource when moving to a new star
-        }
-
-        // Resource specialization check
-        if (!player.chosenResource) {
-            player.chosenResource = resourceType;
-        } else if (player.chosenResource !== resourceType) {
-            // Block harvesting if trying to harvest a different resource
-            showSystemMessage(`You can only harvest ${player.chosenResource} from this star. Move to another star to harvest ${resourceType}.`);
-            return 0;
-        }
-
-        // Resource availability check
-        const resource = star.resourcesByType[resourceType];
-        if (!resource || resource.amount <= 0) {
-            showSystemMessage(`No ${resourceType} available to harvest.`);
-            return 0;
-        }
-
-        // Calculate harvest amount with specialization bonus
-        let harvestAmount = Math.min(10, resource.amount);
-        const specializedResource = getSpecializedResource(player.rocketType);
-        const hasSpecializationBonus = resourceType === specializedResource;
+        // Find the selected resource in the array
+        const resourceIndex = resourceTypes.findIndex(r => r.type === resourceType);
+        if (resourceIndex === -1) return;
         
-        if (hasSpecializationBonus) {
-            harvestAmount = Math.ceil(harvestAmount * 1.25);
-            showSystemMessage(`Bonus! Your ${player.rocketType} rocket harvested ${harvestAmount} ${resource.name}`);
+        const resource = resourceTypes[resourceIndex];
+        
+        // If already harvested, don't allow harvesting again
+        if (resource.harvested) {
+            showSystemMessage('You have already harvested this resource!', 3000);
+            return;
         }
-
-        // Update star's resource amounts
-        resource.amount -= harvestAmount;
-        star.resources = Math.max(0, star.resources - harvestAmount);
-        const isResourceDepleted = resource.amount <= 0;
-
-        // Update player inventory
+        
+        // If depleted, don't allow harvesting
+        if (resource.depleted) {
+            showSystemMessage('This resource has been depleted!', 3000);
+            return;
+        }
+        
+        // Calculate harvest amount based on specialization
+        let harvestAmount = resource.amount;
+        
+        // Specialty bonus: +50% for specialized resource
+        const playerSpecialty = getSpecializedResource(player.rocketType);
+        if (playerSpecialty === resourceType) {
+            harvestAmount = Math.round(harvestAmount * 1.5);
+            showSystemMessage(`Specialty bonus! +50% ${resourceType} harvested!`, 3000);
+        }
+        
+        // Add to player inventory
         if (!player.inventory[resourceType]) {
-            player.inventory[resourceType] = { 
-                name: resource.name, 
-                amount: 0, 
-                color: resource.color 
-            };
+            player.inventory[resourceType] = 0;
         }
-        player.inventory[resourceType].amount += harvestAmount;
-
-        // Update star's harvested resources tracking
-        if (!star.harvestedResources) star.harvestedResources = {};
-        if (!star.harvestedResources[resourceType]) {
-            star.harvestedResources[resourceType] = { 
-                name: resource.name, 
-                amount: 0, 
-                color: resource.color 
-            };
+        player.inventory[resourceType] += harvestAmount;
+        
+        // Mark as harvested
+        resource.harvested = true;
+        
+        // There's a 30% chance to deplete the resource for all players
+        const isResourceDepleted = Math.random() < 0.3;
+        if (isResourceDepleted) {
+            resource.depleted = true;
+            showSystemMessage(`The ${resourceType} resource has been depleted!`, 3000);
         }
-        star.harvestedResources[resourceType].amount += harvestAmount;
-
-        // Contribution to Galactic Hub with retry mechanism
-        try {
-            const contributionSuccess = contributeToHub(resourceType, harvestAmount);
-            
-            if (contributionSuccess) {
-                showSystemMessage(`Added ${harvestAmount} ${resource.name} to the Galactic Hub!`);
-            } else {
-                // Retry contribution if failed
-                setTimeout(() => {
-                    const retrySuccess = contributeToHub(resourceType, harvestAmount);
-                    if (retrySuccess) {
-                        showSystemMessage(`Successfully added ${harvestAmount} ${resource.name} to the Galactic Hub!`);
-                    } else {
-                        console.warn(`Failed to contribute ${resourceType} to the Galactic Hub after retry.`);
-                    }
-                }, 500);
-            }
-        } catch (error) {
-            console.error("Error contributing to hub:", error);
-        }
-
-        // Update UI elements
+        
+        // Update harvest history
+        addToHarvestHistory(star, currentPlayerName, resourceType, harvestAmount);
+        
+        // Show harvest notification
+        showHarvestMessage(star, resourceType, harvestAmount);
+        
+        // Update the UI
         updateHarvestUI(resourceType, resource, isResourceDepleted);
         
-        // Update resource map and visual feedback
+        // Update star hexagons to show the resource as harvested
+        updateStarHexagonsForResource(star, resourceType, resource.depleted ? createDepletedColor(getResourceColor(resourceType)) : getResourceColor(resourceType));
+        
+        // Update resource map if present
         updateResourceMapHexagons(resourceType, isResourceDepleted);
-        if (isResourceDepleted) {
-            updateStarHexagonsForResource(star, resourceType, resource.color);
-        }
         
-        // Record harvest history
-        try {
-            addToHarvestHistory(star, currentPlayerName, resourceType, harvestAmount);
-            
-            // Send network update if socket is connected
-            if (socket && socket.connected) {
-                socket.emit('resourceHarvested', {
+        // Emit to server
+        if (isConnected) {
+            socket.emit('harvestResource', { 
                     starId: star.id,
-                    playerName: currentPlayerName,
                     resourceType: resourceType,
-                    amount: harvestAmount
-                });
-            } else {
-                console.warn("Socket not connected, harvest event not broadcast");
-            }
-        } catch (error) {
-            console.error("Error recording harvest history:", error);
+                amount: harvestAmount,
+                isResourceDepleted: isResourceDepleted
+            });
         }
-        
-        // Show harvest message with visual feedback
-        showHarvestMessage(star, resourceType, harvestAmount);
-        showSystemMessage(`Harvested ${harvestAmount} ${resource.name}`);
-        
-        return harvestAmount;
     }
 
     // Helper function to update UI elements after harvesting
@@ -4606,6 +4191,70 @@ document.addEventListener('DOMContentLoaded', () => {
         return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
     }
 
+    // Draw player name tag
+    function drawPlayerNameTag(x, y, size) {
+        // Only draw if we have a player name
+        if (!currentPlayerName) return;
+        
+        // Save context state
+        ctx.save();
+        
+        // Set font based on zoom level
+        const fontSize = Math.max(10, Math.min(16, 12 * zoom));
+        ctx.font = `bold ${fontSize}px Arial`;
+        
+        // Measure text width for background
+        const textWidth = ctx.measureText(currentPlayerName).width;
+        const padding = 6 * zoom;
+        const tagWidth = textWidth + (padding * 2);
+        const tagHeight = fontSize + (padding * 1.5);
+        
+        // Position the tag to the right of the rocket instead of above it
+        // This avoids overlap with the fuel gauge
+        const tagX = x + size + (10 * zoom);
+        const tagY = y - (tagHeight / 2);
+        
+        // Get rocket color for the tag
+        let tagColor;
+        switch(player.rocketType) {
+            case 'red':
+                tagColor = '#FF5252';
+                break;
+            case 'green':
+                tagColor = '#4CAF50';
+                break;
+            case 'yellow':
+                tagColor = '#FFD700';
+                break;
+            case 'blue':
+            default:
+                tagColor = '#4682B4';
+                break;
+        }
+        
+        // Draw tag background with rocket color
+        ctx.fillStyle = tagColor;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1.5 * zoom;
+        
+        // Draw rounded rectangle for tag
+        roundRect(ctx, tagX, tagY, tagWidth, tagHeight, 4 * zoom, true, true);
+        
+        // Draw text
+        ctx.fillStyle = '#FFFFFF';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(currentPlayerName, tagX + (tagWidth / 2), tagY + (tagHeight / 2));
+        
+        // Draw connecting line from tag to rocket
+        ctx.beginPath();
+        ctx.moveTo(x + (size * 0.5), y);
+        ctx.lineTo(tagX, tagY + (tagHeight / 2));
+        ctx.stroke();
+        
+        // Restore context
+        ctx.restore();
+    }
     
     // Helper function to draw rounded rectangles
     function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
@@ -4635,26 +4284,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // New function to activate a Nexus Shard when multiple players are present
     function activateNexusShardWithPlayers(star, playersAtStar) {
-        // Activate the shard
+        // Only activate if not already activated
+        if (star.hasNexusShard && !star.shardActivated) {
+            // Set as activated
         star.shardActivated = true;
         
-        // Update the nexus shard data
-        if (window.nexusShards && window.nexusShards[star.name]) {
-            window.nexusShards[star.name].activated = true;
-            window.nexusShards[star.name].activatedBy = playersAtStar.map(p => p.id);
-        }
-        
-        // Create player names string for the message
-        const playerNames = playersAtStar.map(p => p.name || `Player ${p.id}`).join(' and ');
-        
-        // Show system notification
+            // Update Nexus Shard status if it exists
+            if (window.nexusShards && window.nexusShards[star.id]) {
+                window.nexusShards[star.id].activated = true;
+            }
+            
+            // Show activation message
+            const playerNames = playersAtStar.map(p => p.name).join(' and ');
         showSystemMessage(`Nexus Shard activated at ${star.name} by ${playerNames}!`, 5000);
         
-        // Add pulse effect animation to the star
-        // This could be implemented by adding a CSS class to the star or creating a visual effect
-        
-        // Check if all shards are activated
+            // Check if all shards are now activated
         checkNexusCompletion();
+            
+            // Emit to server
+            if (isConnected) {
+                socket.emit('activateNexusShard', { 
+                    starId: star.id,
+                    starName: star.name,
+                    playerIds: playersAtStar.map(p => p.id)
+                });
+            }
+            
+            return true;
+        }
+        
+        return false;
     }
 
     // Function to check if all Nexus Shards are activated and initialize the Cosmic Nexus Core
@@ -5011,6 +4670,9 @@ document.addEventListener('DOMContentLoaded', () => {
         let lastTouchX = 0;
         let lastTouchY = 0;
         let touchMoved = false;
+        let touchStartTime = 0;
+        let doubleTapTimer = null;
+        let longPressTimer = null;
         
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
@@ -5020,6 +4682,53 @@ document.addEventListener('DOMContentLoaded', () => {
             lastTouchX = touchStartX;
             lastTouchY = touchStartY;
             touchMoved = false;
+            touchStartTime = Date.now();
+            
+            // Setup long press timer for context menu
+            longPressTimer = setTimeout(() => {
+                // Trigger right-click equivalent
+                if (!touchMoved) {
+                    const mapX = (touch.clientX / scale) - offsetX;
+                    const mapY = (touch.clientY / scale) - offsetY;
+                    
+                    // Toggle ping mode on long press
+                    if (!pingMode) {
+                        togglePingMode();
+                        addPing(mapX, mapY, "", playerName);
+                        togglePingMode();
+                    }
+                }
+            }, 800); // 800ms for long press
+            
+            // Handle double-tap for zoom
+            if (doubleTapTimer) {
+                clearTimeout(doubleTapTimer);
+                doubleTapTimer = null;
+                
+                // Double tap detected - zoom in
+                if (!touchMoved) {
+                    const zoomFactor = 1.5;
+                    const zoomPoint = {
+                        x: (touch.clientX / scale) - offsetX,
+                        y: (touch.clientY / scale) - offsetY
+                    };
+                    
+                    // Calculate new offset to zoom toward tap point
+                    offsetX = zoomPoint.x - (canvas.width / (scale * zoomFactor)) / 2;
+                    offsetY = zoomPoint.y - (canvas.height / (scale * zoomFactor)) / 2;
+                    
+                    // Update scale
+                    scale *= zoomFactor;
+                    
+                    // Enforce limits
+                    enforceCameraLimits();
+                    updateAllPingPositions();
+                }
+            } else {
+                doubleTapTimer = setTimeout(() => {
+                    doubleTapTimer = null;
+                }, 300); // 300ms window for double tap
+            }
         });
         
         canvas.addEventListener('touchmove', (e) => {
@@ -5191,13 +4900,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Update the updateLayoutForScreenSize function
     function updateLayoutForScreenSize() {
-        // Check for small screens
-        const isSmallScreen = window.innerWidth <= 768;
+        // Detect device type
+        const isMobile = window.innerWidth <= 768;
+        const isTablet = window.innerWidth > 768 && window.innerWidth <= 1024;
+        const isDesktop = window.innerWidth > 1024;
+        
+        // Update body class for CSS targeting
+        document.body.classList.remove('mobile-device', 'tablet-device', 'desktop-device');
+        
+        if (isMobile) {
+            document.body.classList.add('mobile-device');
+            setupMobileLayout();
+        } else if (isTablet) {
+            document.body.classList.add('tablet-device');
+            setupTabletLayout();
+        } else {
+            document.body.classList.add('desktop-device');
+            setupDesktopLayout();
+        }
+        
+        // Resize canvas to fit current screen
+        resizeCanvas();
+        
+        // Update UI elements for current size
+        updateUIForCurrentSize();
         
         // Update horizontal scroll indicators visibility
         const indicators = document.querySelectorAll('.horizontal-scroll-indicator');
         indicators.forEach(indicator => {
-            indicator.style.display = isSmallScreen ? 'block' : 'none';
+            indicator.style.display = isMobile ? 'block' : 'none';
         });
         
         // Apply appropriate scroll behavior
@@ -5208,8 +4939,10 @@ document.addEventListener('DOMContentLoaded', () => {
         
         scrollElements.forEach(element => {
             if (element) {
-                if (isSmallScreen) {
+                if (isMobile) {
                     element.style.overflowX = 'auto';
+                    // Add momentum scrolling for iOS
+                    element.style.WebkitOverflowScrolling = 'touch';
                 } else {
                     element.style.overflowX = 'visible';
                 }
@@ -5217,25 +4950,75 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Call this function at initialization or when the DOM is ready
-    document.addEventListener('DOMContentLoaded', function() {
-        enhanceResponsiveLayout();
-    });
+    // Add specific mobile layout adjustments
+    function setupMobileLayout() {
+        // Create collapsible panels for game UI
+        const gameUI = document.querySelectorAll('.game-panel');
+        
+        gameUI.forEach(panel => {
+            // Only add toggle if not already present
+            if (!panel.querySelector('.panel-toggle')) {
+                const panelHeader = panel.querySelector('h3, h4') || document.createElement('div');
+                const toggleBtn = document.createElement('button');
+                toggleBtn.className = 'panel-toggle mobile-toggle';
+                toggleBtn.innerHTML = '−';
+                toggleBtn.setAttribute('aria-label', 'Toggle Panel');
+                
+                // Add toggle functionality
+                toggleBtn.addEventListener('click', function() {
+                    const panelBody = panel.querySelector('.panel-body');
+                    if (panelBody) {
+                        const isCollapsed = panelBody.style.display === 'none';
+                        panelBody.style.display = isCollapsed ? 'block' : 'none';
+                        this.innerHTML = isCollapsed ? '−' : '+';
+                    }
+                });
+                
+                if (panelHeader.parentNode === panel) {
+                    panelHeader.appendChild(toggleBtn);
+                } else {
+                    panel.insertBefore(toggleBtn, panel.firstChild);
+                }
+            }
+        });
+        
+        // Adjust game controls for touch
+        const controlButtons = document.querySelectorAll('.control-button');
+        controlButtons.forEach(button => {
+            button.classList.add('touch-button');
+        });
+    }
 
-    // Add this function to improve the medium-screen layout
+    // Add desktop-specific layout
+    function setupDesktopLayout() {
+        // Remove mobile-specific classes and styles
+        const touchButtons = document.querySelectorAll('.touch-button');
+        touchButtons.forEach(button => {
+            button.classList.remove('touch-button');
+        });
+        
+        // Ensure all panels are visible
+        const panelBodies = document.querySelectorAll('.panel-body');
+        panelBodies.forEach(panel => {
+            panel.style.display = 'block';
+        });
+        
+        // Update game controls for mouse/keyboard
+        setupKeyboardControls();
+    }
+
+    // Add improved tablet layout function
     function setupTabletLayout() {
         const hubProgress = document.getElementById('hubProgress');
         const collaborationPanel = document.getElementById('collaborationPanel');
         
-        // Only apply these changes on medium-sized screens
-        if (window.innerWidth >= 768 && window.innerWidth <= 1366) {
             // Add toggle buttons to expand/collapse panels
             if (hubProgress && !document.getElementById('expandHubBtn')) {
                 const expandBtn = document.createElement('button');
                 expandBtn.id = 'expandHubBtn';
-                expandBtn.className = 'panel-toggle';
+            expandBtn.className = 'panel-toggle tablet-toggle';
                 expandBtn.innerHTML = '&raquo;';
-                expandBtn.style.cssText = 'position:absolute; right:5px; top:10px; background:none; border:none; color:#FFD700; font-size:16px; cursor:pointer; z-index:10; padding:5px;';
+            expandBtn.setAttribute('aria-label', 'Expand/Collapse Hub Panel');
                 
                 expandBtn.addEventListener('click', function(e) {
                     e.stopPropagation();
@@ -5249,9 +5032,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (collaborationPanel && !document.getElementById('expandCollabBtn')) {
                 const expandBtn = document.createElement('button');
                 expandBtn.id = 'expandCollabBtn';
-                expandBtn.className = 'panel-toggle';
+            expandBtn.className = 'panel-toggle tablet-toggle';
                 expandBtn.innerHTML = '&laquo;';
-                expandBtn.style.cssText = 'position:absolute; left:5px; top:10px; background:none; border:none; color:#FFD700; font-size:16px; cursor:pointer; z-index:10; padding:5px;';
+            expandBtn.setAttribute('aria-label', 'Expand/Collapse Collaboration Panel');
                 
                 expandBtn.addEventListener('click', function(e) {
                     e.stopPropagation();
@@ -5273,23 +5056,152 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (hubBtn) hubBtn.innerHTML = '&raquo;';
                 if (collabBtn) collabBtn.innerHTML = '&laquo;';
             });
+        
+        // Set up optimal layout for tablet screen size
+        const gameControls = document.getElementById('gameControls');
+        if (gameControls) {
+            gameControls.classList.add('tablet-controls');
         }
-    }
-
-    // Call this from your existing enhanceResponsiveLayout function
-    function enhanceResponsiveLayout() {
-        // Existing code...
         
-        // Add tablet layout improvements
-        setupTabletLayout();
+        // Adjust UI elements for better tablet experience
+        const resourceSelectors = document.querySelectorAll('.resource-selector');
+        resourceSelectors.forEach(selector => {
+            selector.classList.add('tablet-selector');
+        });
         
-        // Add window resize handler to update tablet layout
-        window.addEventListener('resize', function() {
-            setupTabletLayout();
+        // Add touch-friendly navigation for tablets
+        const navButtons = document.querySelectorAll('.nav-button');
+        navButtons.forEach(button => {
+            button.classList.add('tablet-nav-button');
         });
     }
 
-    // Replace or enhance the showSystemMessage function
+    // Add keyboard controls for desktop
+    function setupKeyboardControls() {
+        // Only add if not already set up
+        if (!window.keyboardControlsActive) {
+            window.keyboardControlsActive = true;
+            
+            window.addEventListener('keydown', (e) => {
+                const moveSpeed = 20 / scale;
+                
+                switch(e.key) {
+                    case 'ArrowUp':
+                    case 'w':
+                        offsetY -= moveSpeed;
+                        break;
+                    case 'ArrowDown':
+                    case 's':
+                        offsetY += moveSpeed;
+                        break;
+                    case 'ArrowLeft':
+                    case 'a':
+                        offsetX -= moveSpeed;
+                        break;
+                    case 'ArrowRight':
+                    case 'd':
+                        offsetX += moveSpeed;
+                        break;
+                    case '+':
+                    case '=':
+                        scale *= 1.1;
+                        break;
+                    case '-':
+                        scale /= 1.1;
+                        break;
+                    case 'Escape':
+                        if (pingMode) togglePingMode();
+                        break;
+                    case 'p':
+                        togglePingMode();
+                        break;
+                }
+                
+                enforceCameraLimits();
+                updateAllPingPositions();
+                render();
+            });
+        }
+    }
+
+    // Add new function to update UI elements for current screen size
+    function updateUIForCurrentSize() {
+        // Adjust font sizes based on screen size
+        const fontSize = isMobileDevice() ? '14px' : '16px';
+        document.documentElement.style.setProperty('--base-font-size', fontSize);
+        
+        // Adjust button sizes for touch devices
+        const buttonSize = isMobileDevice() ? '44px' : '32px';
+        document.documentElement.style.setProperty('--button-size', buttonSize);
+        
+        // Update game panels layout
+        const gamePanels = document.querySelectorAll('.game-panel');
+        gamePanels.forEach(panel => {
+            if (isMobileDevice()) {
+                panel.classList.add('compact-panel');
+            } else {
+                panel.classList.remove('compact-panel');
+            }
+        });
+    }
+
+    // Enhance canvas interaction for both mouse and touch
+    function enhanceCanvasInteraction() {
+        const canvas = document.getElementById('worldMap');
+        
+        // Add mouse wheel zoom
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            
+            // Calculate zoom point (where cursor is)
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            // Convert to world coordinates
+            const worldX = (mouseX / scale) + offsetX;
+            const worldY = (mouseY / scale) + offsetY;
+            
+            // Apply zoom
+            const zoomIntensity = 0.1;
+            const zoomFactor = e.deltaY > 0 ? (1 - zoomIntensity) : (1 + zoomIntensity);
+            
+            scale *= zoomFactor;
+            
+            // Adjust offset to zoom toward mouse position
+            offsetX = worldX - (mouseX / scale);
+            offsetY = worldY - (mouseY / scale);
+            
+            // Enforce limits
+            enforceCameraLimits();
+            updateAllPingPositions();
+            render();
+        });
+    }
+
+    // Call this when initializing
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize responsive layout
+        enhanceResponsiveLayout();
+        
+        // Setup device-specific controls
+        if (isMobileDevice()) {
+            setupTouchControls();
+        } else {
+            setupKeyboardControls();
+        }
+        
+        // Enhance canvas interaction
+        enhanceCanvasInteraction();
+        
+        // Initial layout setup
+        updateLayoutForScreenSize();
+        
+        // Initial canvas sizing
+        resizeCanvas();
+    });
+
+    // Restore harvest message functions
     function showHarvestMessage(star, resourceType, amount) {
         const color = getResourceColor(resourceType);
         const starPosition = star.screenPosition || getStarScreenPosition(star);
@@ -5318,416 +5230,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function getStarScreenPosition(star) {
         // Convert world coordinates to screen coordinates
         return {
-            x: (star.x - cameraX) * zoom + canvas.width / 2,
-            y: (star.y - cameraY) * zoom + canvas.height / 2
+            x: (star.x - offsetX) * scale + canvas.width / 2,
+            y: (star.y - offsetY) * scale + canvas.height / 2
         };
     }
-
-    // Improve setupTouchControls function for iPad compatibility
-    function setupTouchControls() {
-        const canvas = document.getElementById('worldMap');
-        let isDragging = false;
-        let lastX, lastY;
-        let lastTouchDistance = 0;
-        let movementTimeout = null;
-        
-        // Track if we're in a pinch-zoom gesture
-        let isPinching = false;
-        
-        // Make sure touch events have passive: false to prevent scrolling
-        canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-        canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-        canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
-        
-        function handleTouchStart(e) {
-            e.preventDefault(); // Prevent default to avoid scrolling
-            
-            if (e.touches.length === 1) {
-                // Single touch - either drag or tap to move
-                isDragging = true;
-                const touch = e.touches[0];
-                lastX = touch.clientX;
-                lastY = touch.clientY;
-                
-                // Set a timeout to check if this is a tap or drag
-                movementTimeout = setTimeout(() => {
-                    // If we still have touch and haven't moved much, it's a tap-to-move
-                    if (isDragging) {
-                        const canvasRect = canvas.getBoundingClientRect();
-                        const touchX = touch.clientX - canvasRect.left;
-                        const touchY = touch.clientY - canvasRect.top;
-                        
-                        // Convert screen position to world position
-                        const worldX = (touchX / zoomLevel) + cameraX;
-                        const worldY = (touchY / zoomLevel) + cameraY;
-                        
-                        // Move player to the tapped location
-                        player.targetX = worldX;
-                        player.targetY = worldY;
-                        player.isMoving = true;
-                        
-                        // Show a visual indicator at the touch point
-                        showTouchIndicator(touchX, touchY);
-                    }
-                }, 200); // Short delay to differentiate tap from drag
-                
-            } else if (e.touches.length === 2) {
-                // Pinch zoom gesture
-                isPinching = true;
-                isDragging = false;
-                lastTouchDistance = getPinchDistance(e.touches[0], e.touches[1]);
-            }
-        }
-        
-        function handleTouchMove(e) {
-            e.preventDefault(); // Prevent scrolling
-            
-            if (e.touches.length === 1 && isDragging) {
-                // Clear the timeout since we're moving (not a tap)
-                if (movementTimeout) {
-                    clearTimeout(movementTimeout);
-                    movementTimeout = null;
-                }
-                
-                // Regular dragging (pan camera)
-                const touch = e.touches[0];
-                const dx = touch.clientX - lastX;
-                const dy = touch.clientY - lastY;
-                
-                // Pan the camera
-                cameraX -= dx / zoomLevel;
-                cameraY -= dy / zoomLevel;
-                
-                // Update last position
-                lastX = touch.clientX;
-                lastY = touch.clientY;
-                
-            } else if (e.touches.length === 2 && isPinching) {
-                // Pinch zoom
-                const currentDistance = getPinchDistance(e.touches[0], e.touches[1]);
-                const distanceDelta = currentDistance - lastTouchDistance;
-                
-                // Adjust zoom level based on pinch
-                if (Math.abs(distanceDelta) > 5) {
-                    const zoomDelta = distanceDelta * 0.005;
-                    zoomLevel = Math.max(0.5, Math.min(2.0, zoomLevel + zoomDelta));
-                    lastTouchDistance = currentDistance;
-                }
-            }
-        }
-        
-        function handleTouchEnd(e) {
-            // Clear any pending tap timeout
-            if (movementTimeout) {
-                clearTimeout(movementTimeout);
-                movementTimeout = null;
-            }
-            
-            // Handle single-tap movement
-            if (isDragging && e.touches.length === 0 && !isPinching) {
-                // This was a tap - check if it was short enough to be considered a tap
-                const canvasRect = canvas.getBoundingClientRect();
-                const touchX = lastX - canvasRect.left;
-                const touchY = lastY - canvasRect.top;
-                
-                // Convert screen position to world position
-                const worldX = (touchX / zoomLevel) + cameraX;
-                const worldY = (touchY / zoomLevel) + cameraY;
-                
-                // Check if this is a click on a star
-                let clickedOnStar = false;
-                for (const star of starSystems) {
-                    const distance = Math.sqrt(Math.pow(worldX - star.x, 2) + Math.pow(worldY - star.y, 2));
-                    if (distance < star.radius) {
-                        clickedOnStar = true;
-                        handleCanvasClick(worldX, worldY);
-                        break;
-                    }
-                }
-                
-                // If not clicking on a star, then move
-                if (!clickedOnStar) {
-                    player.targetX = worldX;
-                    player.targetY = worldY;
-                    player.isMoving = true;
-                    
-                    // Show a visual indicator
-                    showTouchIndicator(touchX, touchY);
-                }
-            }
-            
-            // Reset flags
-            isDragging = false;
-            isPinching = false;
-        }
-        
-        // Helper function to show a touch indicator
-        function showTouchIndicator(x, y) {
-            const indicator = document.createElement('div');
-            indicator.className = 'touch-indicator';
-            indicator.style.position = 'absolute';
-            indicator.style.left = `${x}px`;
-            indicator.style.top = `${y}px`;
-            indicator.style.width = '20px';
-            indicator.style.height = '20px';
-            indicator.style.borderRadius = '50%';
-            indicator.style.border = '2px solid white';
-            indicator.style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
-            indicator.style.transform = 'translate(-50%, -50%)';
-            indicator.style.pointerEvents = 'none';
-            indicator.style.zIndex = '1000';
-            document.body.appendChild(indicator);
-            
-            // Add animation
-            indicator.animate([
-                { opacity: 1, transform: 'translate(-50%, -50%) scale(0.5)' },
-                { opacity: 0, transform: 'translate(-50%, -50%) scale(1.5)' }
-            ], {
-                duration: 1000,
-                easing: 'ease-out'
-            }).onfinish = () => {
-                if (indicator.parentNode) {
-                    indicator.parentNode.removeChild(indicator);
-                }
-            };
-        }
-        
-        // Add alternative movement controls for accessibility
-        addDirectionalControls();
-    }
-
-    // Add directional control buttons for easier movement on mobile
-    function addDirectionalControls() {
-        const controlsContainer = document.createElement('div');
-        controlsContainer.className = 'direction-controls';
-        controlsContainer.style.position = 'absolute';
-        controlsContainer.style.bottom = '100px';
-        controlsContainer.style.right = '20px';
-        controlsContainer.style.display = 'grid';
-        controlsContainer.style.gridTemplateColumns = 'repeat(3, 1fr)';
-        controlsContainer.style.gridTemplateRows = 'repeat(3, 1fr)';
-        controlsContainer.style.gap = '5px';
-        controlsContainer.style.zIndex = '1000';
-        
-        // Create direction buttons with positions in the grid
-        const directions = [
-            { dir: 'nw', icon: '↖', row: 1, col: 1 },
-            { dir: 'n', icon: '↑', row: 1, col: 2 },
-            { dir: 'ne', icon: '↗', row: 1, col: 3 },
-            { dir: 'w', icon: '←', row: 2, col: 1 },
-            { dir: 'c', icon: '•', row: 2, col: 2 },
-            { dir: 'e', icon: '→', row: 2, col: 3 },
-            { dir: 'sw', icon: '↙', row: 3, col: 1 },
-            { dir: 's', icon: '↓', row: 3, col: 2 },
-            { dir: 'se', icon: '↘', row: 3, col: 3 }
-        ];
-        
-        directions.forEach(d => {
-            const btn = document.createElement('button');
-            btn.innerHTML = d.icon;
-            btn.className = 'direction-btn';
-            btn.style.width = '40px';
-            btn.style.height = '40px';
-            btn.style.borderRadius = '50%';
-            btn.style.backgroundColor = d.dir === 'c' ? 'rgba(0,0,0,0.2)' : 'rgba(70, 130, 180, 0.7)';
-            btn.style.border = 'none';
-            btn.style.color = 'white';
-            btn.style.fontSize = '18px';
-            btn.style.display = 'flex';
-            btn.style.justifyContent = 'center';
-            btn.style.alignItems = 'center';
-            btn.style.gridRow = d.row;
-            btn.style.gridColumn = d.col;
-            btn.style.cursor = 'pointer';
-            btn.style.boxShadow = '0 0 5px rgba(0,0,0,0.3)';
-            
-            if (d.dir !== 'c') {
-                btn.addEventListener('click', () => movePlayerInDirection(d.dir));
-                btn.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    movePlayerInDirection(d.dir);
-                });
-            } else {
-                btn.addEventListener('click', () => player.isMoving = false);
-                btn.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    player.isMoving = false;
-                });
-            }
-            
-            controlsContainer.appendChild(btn);
-        });
-        
-        document.body.appendChild(controlsContainer);
-    }
-
-    // Helper function to move player in a direction
-    function movePlayerInDirection(direction) {
-        if (!currentPlayer) return;
-        
-        const moveDistance = 100;
-        let targetX = currentPlayer.x;
-        let targetY = currentPlayer.y;
-        
-        switch(direction) {
-            case 'n':
-                targetY -= moveDistance;
-                break;
-            case 's':
-                targetY += moveDistance;
-                break;
-            case 'e':
-                targetX += moveDistance;
-                break;
-            case 'w':
-                targetX -= moveDistance;
-                break;
-            case 'ne':
-                targetX += moveDistance * 0.7;
-                targetY -= moveDistance * 0.7;
-                break;
-            case 'nw':
-                targetX -= moveDistance * 0.7;
-                targetY -= moveDistance * 0.7;
-                break;
-            case 'se':
-                targetX += moveDistance * 0.7;
-                targetY += moveDistance * 0.7;
-                break;
-            case 'sw':
-                targetX -= moveDistance * 0.7;
-                targetY += moveDistance * 0.7;
-                break;
-        }
-        
-        currentPlayer.targetX = targetX;
-        currentPlayer.targetY = targetY;
-        currentPlayer.isMoving = true;
-        
-        if (socket && socket.connected) {
-            socket.emit('updatePosition', { x: targetX, y: targetY });
-        }
-    }
-
-    function updateStartButton() {
-        if (isHost) {
-            startGameBtn.disabled = false;
-            startGameBtn.textContent = 'Start Game';
-        } else {
-            startGameBtn.disabled = true;
-            startGameBtn.textContent = 'Waiting for host to start...';
-        }
-    }
-
-    // Add this to the socket event listeners section
-    if (socket) {
-        // ... existing socket event listeners ...
-        
-        socket.on('newHost', (data) => {
-            console.log(`New host assigned: ${data.name}`);
-            if (data.id === socket.id) {
-                isHost = true;
-                showSystemMessage('You are now the host!');
-            }
-            updateStartButton();
-        });
-        
-        // ... existing socket event listeners ...
-    }
-
-    function updatePlayerMovement() {
-        // Guard against undefined currentPlayer
-        if (!currentPlayer) {
-            if (currentPlayerId && players[currentPlayerId]) {
-                currentPlayer = players[currentPlayerId]; // Try to recover
-                console.log("Recovered currentPlayer reference in updatePlayerMovement");
-            } else {
-                return; // Exit if we can't recover
-            }
-        }
-
-        // Handle current player movement
-        if (currentPlayer.isMoving) {
-            const dx = currentPlayer.targetX - currentPlayer.x;
-            const dy = currentPlayer.targetY - currentPlayer.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            if (distance > currentPlayer.speed) {
-                // Update rotation to face movement direction
-                currentPlayer.rotation = Math.atan2(dy, dx);
-                
-                // Calculate new position
-                const moveX = Math.cos(currentPlayer.rotation) * currentPlayer.speed;
-                const moveY = Math.sin(currentPlayer.rotation) * currentPlayer.speed;
-                
-                // Update position
-                currentPlayer.x += moveX;
-                currentPlayer.y += moveY;
-                
-                // Ensure player stays within world boundaries
-                if (currentPlayer.x < 0) currentPlayer.x = 0;
-                if (currentPlayer.y < 0) currentPlayer.y = 0;
-                if (currentPlayer.x > worldWidth) currentPlayer.x = worldWidth;
-                if (currentPlayer.y > worldHeight) currentPlayer.y = worldHeight;
-                
-                // Ensure visibility is set
-                currentPlayer.visible = true;
-            } else {
-                // We've reached the target
-                currentPlayer.x = currentPlayer.targetX;
-                currentPlayer.y = currentPlayer.targetY;
-                currentPlayer.isMoving = false;
-            }
-
-            // Send position update to server if connected
-            if (socket && socket.connected) {
-                socket.emit('updatePosition', { 
-                    x: currentPlayer.x, 
-                    y: currentPlayer.y,
-                    rotation: currentPlayer.rotation,
-                    visible: true
-                });
-            }
-        }
-
-        // Update other players movement
-        Object.values(players).forEach(p => {
-            if (p && p.id !== currentPlayerId && p.isMoving) {
-                const dx = p.targetX - p.x;
-                const dy = p.targetY - p.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                
-                // Use the player's speed or default to 8 for consistency with current player
-                const speed = p.speed || 8;
-
-                if (distance > speed) {
-                    p.rotation = Math.atan2(dy, dx);
-                    p.x += Math.cos(p.rotation) * speed;
-                    p.y += Math.sin(p.rotation) * speed;
-                    
-                    // Ensure other players stay within boundaries
-                    if (p.x < 0) p.x = 0;
-                    if (p.y < 0) p.y = 0;
-                    if (p.x > worldWidth) p.x = worldWidth;
-                    if (p.y > worldHeight) p.y = worldHeight;
-                    
-                    // Ensure visibility
-                    p.visible = true;
-                } else {
-                    p.x = p.targetX;
-                    p.y = p.targetY;
-                    p.isMoving = false;
-                }
-            }
-        });
-
-        // Update camera to follow current player
-        if (currentPlayer) {
-            cameraX = currentPlayer.x;
-            cameraY = currentPlayer.y;
-            
-            // Enforce camera limits
-            enforceCameraLimits();
-        }
-    }
-});
+}); 
