@@ -2387,6 +2387,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update and draw player
         updatePlayerPosition();
         
+        // Set currentPlayer if it's not defined but we have a valid player ID
+        if (!currentPlayer && currentPlayerId && players[currentPlayerId]) {
+            currentPlayer = players[currentPlayerId];
+            console.log("Setting currentPlayer in render():", currentPlayer);
+        }
+        
         // Draw the current player
         if (currentPlayer) {
             drawPlayer();
@@ -2407,13 +2413,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update explore button position if active
         if (activeExploreButtonStar) {
             updateExploreButtonPosition();
-        }
-        
-        // Debug info - remove after fixing
-        if (players.length > 0 && !rocketsDebuggedOnce) {
-            console.log("Players in game:", players);
-            console.log("Current player:", currentPlayer);
-            rocketsDebuggedOnce = true;
         }
     }
     
@@ -5703,9 +5702,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // Camera follows ONLY the current player's rocket
-        if (currentPlayer) {
-            cameraX = currentPlayer.x;
-            cameraY = currentPlayer.y;
+        if (currentPlayerId && players[currentPlayerId]) {
+            currentPlayer = players[currentPlayerId]; // Set currentPlayer to ensure it's defined
+            cameraX = players[currentPlayerId].x;  
+            cameraY = players[currentPlayerId].y;
         }
     }
 });
