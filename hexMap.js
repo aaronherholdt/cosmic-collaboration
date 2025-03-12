@@ -23,11 +23,16 @@ document.addEventListener('DOMContentLoaded', () => {
     let isConnected = false;
     
     // Player data
-    let currentPlayerId = '';
-    let currentPlayerName = '';
-    let selectedRocketType = 'blue'; // Default rocket
-    let players = {}; // Keep as an object to match server-side structure
-    let isHost = false; // First player becomes host
+    let currentPlayer = null;     // Reference to the local player in players object
+    let currentPlayerId = '';     // Unique identifier for the current player
+    let currentPlayerName = '';   // Display name of the current player
+    let selectedRocketType = 'blue'; // Default rocket type selection
+    let players = {};             // Collection of all players in the game
+    let isHost = false;           // Flag indicating if current player is the host
+    
+    // Default size and speed values to use when creating players
+    const DEFAULT_PLAYER_SIZE = 30;
+    const DEFAULT_PLAYER_SPEED = 8; // Higher speed for faster movement
     
     // Galactic Hub data
     let hubGoals = {
@@ -254,108 +259,93 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Please enter a name with at least 2 characters');
             return;
         }
-        
+
         currentPlayerName = name;
-        
-        // Only use socket.id as the player ID when connected
+
         if (socket && socket.connected) {
             currentPlayerId = socket.id;
             
-            // Initialize player position before adding to players object
-            player.x = galaxyCenterX + (Math.random() - 0.5) * galaxyRadius * 0.5;
-            player.y = galaxyCenterY + (Math.random() - 0.5) * galaxyRadius * 0.5;
-            player.targetX = player.x;
-            player.targetY = player.y;
-            player.rotation = 0;
-            player.isMoving = false;
-            player.rocketType = selectedRocketType;
-            player.name = name;
-            player.visible = true; // Make sure player is visible
-            
-            // Ensure we have a local player entry in the players object
+            // Generate random position
+            const posX = galaxyCenterX + (Math.random() - 0.5) * galaxyRadius * 0.5;
+            const posY = galaxyCenterY + (Math.random() - 0.5) * galaxyRadius * 0.5;
+
+            // Initialize player data
             players[currentPlayerId] = {
                 id: currentPlayerId,
                 name: name,
-                isHost: false, // Server will set this correctly
+                isHost: false, // Server will set this
                 rocketType: selectedRocketType,
-                x: player.x,
-                y: player.y,
-                targetX: player.x,
-                targetY: player.y,
+                x: posX,
+                y: posY,
+                targetX: posX, // Set target to match initial position
+                targetY: posY,
                 rotation: 0,
                 isMoving: false,
-                visible: true // Explicitly set visibility
+                visible: true,
+                speed: 8, // Increased for faster movement
+                size: 30,
+                fuel: 100,
+                maxFuel: 100,
+                inventory: {},
+                chosenResource: null,
+                currentStar: null
             };
-            
-            // Set the currentPlayer reference to the player in the players object
+
+            // Set currentPlayer reference
             currentPlayer = players[currentPlayerId];
-            
+
             console.log(`Joining game with name: ${name}, rocket: ${selectedRocketType}`);
-            console.log("Player initialized at position:", player.x, player.y);
-            console.log("currentPlayer reference set:", currentPlayer);
-            
+            console.log("Player initialized at position:", currentPlayer.x, currentPlayer.y);
+
             // Emit join game event to server
             socket.emit('joinGame', {
                 playerName: name,
                 rocketType: selectedRocketType,
-                position: {
-                    x: player.x,
-                    y: player.y
-                }
+                position: { x: currentPlayer.x, y: currentPlayer.y }
             });
-            
-            // Switch to waiting room screen
+
             switchScreen('loginScreen', 'waitingRoomScreen');
-            
-            // The player list will be updated when the server sends back the player data
         } else {
-            // Fallback for offline testing - create a simulated player ID
+            // Offline mode
             currentPlayerId = 'local-' + Date.now();
             
-            // Initialize player position
-            player.x = galaxyCenterX + (Math.random() - 0.5) * galaxyRadius * 0.5;
-            player.y = galaxyCenterY + (Math.random() - 0.5) * galaxyRadius * 0.5;
-            player.targetX = player.x;
-            player.targetY = player.y;
-            player.rotation = 0;
-            player.isMoving = false;
-            player.rocketType = selectedRocketType;
-            player.name = name;
-            player.visible = true;
+            // Generate random position
+            const posX = galaxyCenterX + (Math.random() - 0.5) * galaxyRadius * 0.5;
+            const posY = galaxyCenterY + (Math.random() - 0.5) * galaxyRadius * 0.5;
             
-            // Add to players object
             players[currentPlayerId] = {
                 id: currentPlayerId,
                 name: name,
-                isHost: true, // Local player is host in offline mode
+                isHost: true,
                 rocketType: selectedRocketType,
-                x: player.x,
-                y: player.y,
-                targetX: player.x,
-                targetY: player.y,
+                x: posX,
+                y: posY,
+                targetX: posX, // Set target to match initial position
+                targetY: posY,
                 rotation: 0,
                 isMoving: false,
-                visible: true // Explicitly set visibility
+                visible: true,
+                speed: 8, // Increased for faster movement
+                size: 30,
+                fuel: 100,
+                maxFuel: 100,
+                inventory: {},
+                chosenResource: null,
+                currentStar: null
             };
-            
-            // Set the currentPlayer reference to the player in the players object
+
             currentPlayer = players[currentPlayerId];
-            
+
             console.log(`Joining offline game with name: ${name}, rocket: ${selectedRocketType}`);
-            console.log("Player initialized at position:", player.x, player.y);
-            console.log("currentPlayer reference set:", currentPlayer);
-            
-            // Switch to waiting room screen
             switchScreen('loginScreen', 'waitingRoomScreen');
-            
-            // For offline testing, simulate other players
             simulateSocketConnection();
         }
-        
-        // Debug - force a redraw to see if player appears
+
+        // Force redraw after join
         setTimeout(() => {
             console.log("Forcing redraw after join...");
-            drawPlayers();
+            if (typeof drawPlayers === 'function') drawPlayers();
+            console.log("Current player after redraw:", currentPlayer);
         }, 1000);
     }
     
@@ -481,9 +471,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleGameStart() {
+        console.log("Game starting...");
+        
         gameStarted = true;
         switchScreen('waitingRoomScreen', 'gameScreen');
+        
+        // Initialize game components
         initializeGameComponents();
+        
+        // Make sure currentPlayer is properly set before starting animation
+        if (currentPlayerId && players[currentPlayerId]) {
+            currentPlayer = players[currentPlayerId];
+            console.log("Current player set in handleGameStart:", currentPlayer.name);
+            
+            // Center camera on player initially
+            cameraX = currentPlayer.x;
+            cameraY = currentPlayer.y;
+            
+            // Update player speed for faster movement
+            currentPlayer.speed = 8;
+        } else {
+            console.warn("Current player not found when starting game!");
+        }
+        
+        // Start the animation loop
+        console.log("Starting animation loop");
+        animationLoop();
+        
+        // Force a redraw after a short delay to ensure everything is visible
+        setTimeout(() => {
+            console.log("Forcing redraw after game start");
+            drawPlayers();
+        }, 500);
     }
 
     function initializeGameComponents() {
@@ -998,24 +1017,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let hoveredStar = null;
     let hoveredResourceIndicator = null; // Track hovered resource indicator
     let activeExploreButtonStar = null; // Track which star has an active explore button
-    
-    // Player rocket
-    const player = {
-        x: 0,
-        y: 0,
-        targetX: 0,
-        targetY: 0,
-        speed: 5,
-        size: 30,
-        rotation: 0,
-        isMoving: false,
-        fuel: 100,
-        maxFuel: 100,
-        rocketType: 'blue', // Default rocket type
-        inventory: {}, // Add inventory to track resources
-        chosenResource: null, // New property to track chosen resource per star
-        currentStar: null     // New property to track which star the player is at
-    };
     
     // Star systems (galaxy structure)
     const starSystems = [];
@@ -5657,42 +5658,83 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updatePlayerMovement() {
-        const currentPlayer = players[currentPlayerId];
-        
-        // Move current player towards target
-        if (currentPlayer && currentPlayer.isMoving) {
+        // Guard against undefined currentPlayer
+        if (!currentPlayer) {
+            if (currentPlayerId && players[currentPlayerId]) {
+                currentPlayer = players[currentPlayerId]; // Try to recover
+                console.log("Recovered currentPlayer reference in updatePlayerMovement");
+            } else {
+                return; // Exit if we can't recover
+            }
+        }
+
+        // Handle current player movement
+        if (currentPlayer.isMoving) {
             const dx = currentPlayer.targetX - currentPlayer.x;
             const dy = currentPlayer.targetY - currentPlayer.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            if (distance > player.speed) {
+
+            if (distance > currentPlayer.speed) {
+                // Update rotation to face movement direction
                 currentPlayer.rotation = Math.atan2(dy, dx);
-                currentPlayer.x += Math.cos(currentPlayer.rotation) * player.speed;
-                currentPlayer.y += Math.sin(currentPlayer.rotation) * player.speed;
+                
+                // Calculate new position
+                const moveX = Math.cos(currentPlayer.rotation) * currentPlayer.speed;
+                const moveY = Math.sin(currentPlayer.rotation) * currentPlayer.speed;
+                
+                // Update position
+                currentPlayer.x += moveX;
+                currentPlayer.y += moveY;
+                
+                // Ensure player stays within world boundaries
+                if (currentPlayer.x < 0) currentPlayer.x = 0;
+                if (currentPlayer.y < 0) currentPlayer.y = 0;
+                if (currentPlayer.x > worldWidth) currentPlayer.x = worldWidth;
+                if (currentPlayer.y > worldHeight) currentPlayer.y = worldHeight;
+                
+                // Ensure visibility is set
+                currentPlayer.visible = true;
             } else {
+                // We've reached the target
                 currentPlayer.x = currentPlayer.targetX;
                 currentPlayer.y = currentPlayer.targetY;
                 currentPlayer.isMoving = false;
             }
 
-            // Update your position on the server
+            // Send position update to server if connected
             if (socket && socket.connected) {
-                socket.emit('updatePosition', { x: currentPlayer.x, y: currentPlayer.y });
+                socket.emit('updatePosition', { 
+                    x: currentPlayer.x, 
+                    y: currentPlayer.y,
+                    rotation: currentPlayer.rotation,
+                    visible: true
+                });
             }
         }
 
-        // Update other players' positions (smooth interpolation)
+        // Update other players movement
         Object.values(players).forEach(p => {
-            if (p.id !== currentPlayerId && p.isMoving) {
+            if (p && p.id !== currentPlayerId && p.isMoving) {
                 const dx = p.targetX - p.x;
                 const dy = p.targetY - p.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
-                const speed = player.speed; // Use same speed as local player
+                
+                // Use the player's speed or default to 8 for consistency with current player
+                const speed = p.speed || 8;
 
                 if (distance > speed) {
                     p.rotation = Math.atan2(dy, dx);
                     p.x += Math.cos(p.rotation) * speed;
                     p.y += Math.sin(p.rotation) * speed;
+                    
+                    // Ensure other players stay within boundaries
+                    if (p.x < 0) p.x = 0;
+                    if (p.y < 0) p.y = 0;
+                    if (p.x > worldWidth) p.x = worldWidth;
+                    if (p.y > worldHeight) p.y = worldHeight;
+                    
+                    // Ensure visibility
+                    p.visible = true;
                 } else {
                     p.x = p.targetX;
                     p.y = p.targetY;
@@ -5701,11 +5743,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Camera follows ONLY the current player's rocket
-        if (currentPlayerId && players[currentPlayerId]) {
-            currentPlayer = players[currentPlayerId]; // Set currentPlayer to ensure it's defined
-            cameraX = players[currentPlayerId].x;  
-            cameraY = players[currentPlayerId].y;
+        // Update camera to follow current player
+        if (currentPlayer) {
+            cameraX = currentPlayer.x;
+            cameraY = currentPlayer.y;
+            
+            // Enforce camera limits
+            enforceCameraLimits();
         }
     }
 });
