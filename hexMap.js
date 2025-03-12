@@ -348,7 +348,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Add a player to the list
     function addPlayer(id, name, isPlayerHost = false, rocketType) {
-        // Add player to the players object if they don't exist yet
+        // Add player to the players object if they don’t exist yet
         if (!players[id]) {
             players[id] = {
                 id: id,
@@ -361,7 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 targetY: 0,
                 rotation: 0,
                 isMoving: false,
-                visible: true // Explicitly set visibility
+                visible: true
             };
             
             console.log(`Player added: ${name} (${id}), rocket: ${rocketType}`);
@@ -372,20 +372,12 @@ document.addEventListener('DOMContentLoaded', () => {
             currentPlayer = players[id];
             console.log("Current player reference set:", currentPlayer);
             
-            // If current player doesn't have a position yet, initialize it
+            // If current player doesn’t have a position yet, initialize it
             if (currentPlayer.x === 0 && currentPlayer.y === 0) {
                 currentPlayer.x = galaxyCenterX + (Math.random() - 0.5) * galaxyRadius * 0.5;
                 currentPlayer.y = galaxyCenterY + (Math.random() - 0.5) * galaxyRadius * 0.5;
                 currentPlayer.targetX = currentPlayer.x;
                 currentPlayer.targetY = currentPlayer.y;
-                
-                // Sync with player object (if different from currentPlayer)
-                if (player) {
-                    player.x = currentPlayer.x;
-                    player.y = currentPlayer.y;
-                    player.targetX = currentPlayer.x;
-                    player.targetY = currentPlayer.y;
-                }
                 
                 console.log("Initialized current player position:", currentPlayer.x, currentPlayer.y);
             }
