@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedRocketType = 'blue'; // Default rocket
     const players = {}; // Store all players
     let isHost = false; // First player becomes host
+    let isGameStarted = false; // Track if game has been started
     
     // Galactic Hub data
     let hubGoals = {
@@ -134,8 +135,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         socket.on('fullGameState', (data) => {
+            console.log('Received full game state from server', data);
+            
             // Handle full game state information
             if (data.isGameStarted) {
+                console.log('Game is already in progress');
                 isGameStarted = true;
             }
             
@@ -168,7 +172,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             // If game is already started, move to game screen
-            if (data.isGameStarted) {
+            if (data.isGameStarted && !waitingRoomScreen.classList.contains('active')) {
+                console.log('Starting game from fullGameState');
                 startGame();
             }
             
@@ -196,6 +201,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         socket.on('gameStarted', () => {
+            console.log('Game started event received from server');
+            isGameStarted = true;
             startGame();
         });
         
@@ -547,6 +554,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Start the game
     function startGame() {
+        console.log('Starting game... Host:', isHost, 'Game already started:', isGameStarted);
+        
+        // Non-hosts can't start the game unless it's already started by the server
         if (!isHost && !isGameStarted) {
             showSystemMessage('Only the host can start the game.', 3000);
             return;
@@ -567,8 +577,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Mark game as started
         isGameStarted = true;
         
-        // Emit to server that the game has started
-        if (isConnected && isHost) {
+        // Emit to server that the game has started (only if we're the host and initiating)
+        if (isConnected && isHost && waitingRoomScreen.classList.contains('active')) {
+            console.log('Sending startGame event to server');
             socket.emit('startGame');
         }
     }
