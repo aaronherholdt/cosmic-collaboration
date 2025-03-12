@@ -71,23 +71,18 @@ io.on('connection', (socket) => {
 
     // Core player join functionality
     socket.on('playerJoin', ({ playerName, rocketType }) => {
-        console.log(`Player joined: ${playerName} with rocket: ${rocketType}`);
-        
-        // Add player to game state - enhanced player object with movement data
         gameState.players[socket.id] = {
             id: socket.id,
             name: playerName,
             rocketType: rocketType,
             position: { x: 0, y: 0 },
-            previousPositions: [], // Store position history
+            previousPositions: [],
             velocity: { x: 0, y: 0 },
-            direction: 0, // Direction in radians
+            direction: 0,
             lastMoveTime: Date.now(),
             isMoving: false,
             isHost: Object.keys(gameState.players).length === 0
         };
-
-        // Broadcast new player to all connected clients
         io.emit('playerJoined', {
             id: socket.id,
             name: playerName,
@@ -96,8 +91,6 @@ io.on('connection', (socket) => {
             position: { x: 0, y: 0 },
             direction: 0
         });
-
-        // Send current player list to the new player
         socket.emit('playerList', Object.values(gameState.players).map(player => ({
             id: player.id,
             name: player.name,
@@ -107,19 +100,26 @@ io.on('connection', (socket) => {
             direction: player.direction,
             isMoving: player.isMoving
         })));
-
-        // If game has already started, update the new player
+        // Sync game state for late joiners
+        socket.emit('fullGameState', {
+            players: gameState.players,
+            hubProgress: gameState.hubProgress,
+            isGameStarted: gameState.isGameStarted
+        });
         if (gameState.isGameStarted) {
             socket.emit('gameStarted');
-            socket.emit('updateHubProgress', gameState.hubProgress);
+            console.log(`Notified late joiner ${socket.id} that game has started`);
         }
     });
 
     // Game start handler
     socket.on('startGame', () => {
         if (gameState.players[socket.id] && gameState.players[socket.id].isHost) {
+            console.log(`Host ${socket.id} started the game. Broadcasting to ${Object.keys(gameState.players).length} players.`);
             gameState.isGameStarted = true;
             io.emit('gameStarted');
+        } else {
+            console.log(`Non-host ${socket.id} attempted to start the game. Ignoring.`);
         }
     });
 
