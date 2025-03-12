@@ -186,6 +186,12 @@ io.on('connection', (socket) => {
         });
     });
     
+    // Start game event
+    socket.on('startGame', () => {
+        io.emit('startGame');
+        console.log('Game started by host:', socket.id);
+    });
+    
     // Disconnect
     socket.on('disconnect', () => {
         console.log(`User disconnected: ${socket.id}`);
