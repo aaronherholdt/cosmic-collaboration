@@ -270,6 +270,9 @@ body {
     display: flex;
     flex-direction: column;
     height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    position: relative;
 }
 
 canvas {
@@ -1486,6 +1489,7 @@ button:hover {
 .touch-device #playerList::-webkit-scrollbar {
   display: none; /* Hide scrollbar for Chrome/Safari */
 }
+
 /* Indicate scrollable areas */
 .touch-device .rocket-options::after,
 .touch-device #playerList::after {
@@ -1759,4 +1763,114 @@ button:hover {
         width: 60px !important;
         height: 60px !important;
     }
+}
+
+/* Ensure game fills viewport */
+.game-interface {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Touch-friendly buttons */
+button, .rocket-option, .player-item, .direction-btn {
+    min-width: 44px;
+    min-height: 44px;
+    touch-action: manipulation; /* Prevent double-tap zoom */
+}
+
+/* Directional controls */
+.direction-controls {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    z-index: 1000;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 10px;
+}
+
+.direction-btn {
+    width: 50px;
+    height: 50px;
+    font-size: 20px;
+    border-radius: 50%;
+    background: rgba(70, 130, 180, 0.8);
+    border: none;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.direction-btn:active {
+    background: rgba(100, 149, 237, 1);
+    transform: scale(1.1);
+}
+
+/* Controls overlay */
+.controls-overlay {
+    position: fixed;
+    bottom: 20px;
+    right: 80px; /* Adjusted to avoid overlap with directional controls */
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 1000;
+}
+
+.control-button {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: rgba(30, 58, 138, 0.8);
+    border: none;
+    color: white;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Responsive UI panels */
+@media (max-width: 768px) {
+    .hub-progress, .collaboration-panel {
+        width: 90%;
+        max-height: 40vh;
+        overflow-y: auto;
+        font-size: 0.9rem;
+    }
+    .hub-progress { left: 5px; top: 5px; }
+    .collaboration-panel { right: 5px; top: 5px; }
+    .direction-btn { width: 45px; height: 45px; font-size: 18px; }
+    .control-button { width: 45px; height: 45px; font-size: 18px; }
+}
+
+@media (min-width: 769px) and (max-width: 1366px) {
+    .hub-progress, .collaboration-panel {
+        width: 250px;
+        max-height: 50vh;
+    }
+}
+
+/* Touch indicator */
+.touch-indicator {
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 2px solid white;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    animation: pulse 1s ease-out;
+    pointer-events: none;
+}
+
+@keyframes pulse {
+    0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
 } 
