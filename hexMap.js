@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentPlayerId = '';
     let currentPlayerName = '';
     let selectedRocketType = 'blue'; // Default rocket
-    const players = {}; // Store all players
+    let players = {}; // Keep as an object to match server-side structure
     let isHost = false; // First player becomes host
     
     // Galactic Hub data
@@ -90,25 +90,50 @@ document.addEventListener('DOMContentLoaded', () => {
         // Add game state handler
         socket.on('gameState', (state) => {
             console.log('Received game state:', state);
-            if (state.players[socket.id]) {
-                isHost = state.players[socket.id].isHost;
-                currentPlayerId = socket.id;
-                currentPlayerName = state.players[socket.id].name;
-                selectedRocketType = state.players[socket.id].rocketType;
+            
+            // Update players from server state
+            if (state.players) {
+                // Clear existing players and add from server state
+                players = {};
+                
+                // Add each player from the state
+                Object.entries(state.players).forEach(([id, playerData]) => {
+                    players[id] = playerData;
+                    
+                    // Update local player info if this is us
+                    if (id === socket.id) {
+                        isHost = playerData.isHost;
+                        currentPlayerId = id;
+                        currentPlayerName = playerData.name;
+                        selectedRocketType = playerData.rocketType;
+                    }
+                });
+                
+                // Update UI
+                updatePlayerList();
                 updateStartButton();
             }
+            
+            // Handle other game state updates here if needed
+            // For example, hub progress, star systems, etc.
         });
 
         socket.on('playerJoined', (data) => {
             console.log('Player joined:', data);
+            
+            // Update local player data if this is us
             if (data.id === socket.id) {
                 isHost = data.isHost;
                 currentPlayerId = data.id;
                 currentPlayerName = data.name;
                 selectedRocketType = data.rocketType;
+                showSystemMessage(`You joined as ${data.isHost ? 'host' : 'player'}`);
+            } else {
+                showSystemMessage(`${data.name} joined the game`);
             }
+            
+            // Add player to local players object
             addPlayer(data.id, data.name, data.isHost, data.rocketType);
-            updatePlayerList();
             updateStartButton();
         });
 
@@ -167,8 +192,11 @@ document.addEventListener('DOMContentLoaded', () => {
         socket.on('playerLeft', (data) => {
             console.log('Player left:', data);
             showSystemMessage(`${data.name} left the game`);
+            
+            // Use the removePlayer function to properly handle player removal
             removePlayer(data.id);
-            updatePlayerList();
+            // updatePlayerList is called inside removePlayer
+            updateStartButton();
         });
 
         // Handle other player movement
@@ -228,47 +256,48 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         currentPlayerName = name;
-        currentPlayerId = currentPlayerId || 'player_' + Math.random().toString(36).substr(2, 9); // Ensure ID is set
         
-        // Ensure the current player is in players
-        if (!players[currentPlayerId]) {
-            addPlayer(currentPlayerId, name, Object.keys(players).length === 0, selectedRocketType);
-        }
-        
-        switchScreen('loginScreen', 'waitingRoomScreen');
-        
-        if (isHost) {
-            startGameBtn.disabled = false;
-            startGameBtn.textContent = 'Start Game';
-            simulateOtherPlayersJoining();
+        // Only use socket.id as the player ID when connected
+        if (socket && socket.connected) {
+            currentPlayerId = socket.id;
+            
+            // Emit join game event to server
+            socket.emit('joinGame', {
+                playerName: name,
+                rocketType: selectedRocketType
+            });
+            
+            // Let the server handle adding the player
+            console.log(`Joining game with name: ${name}, rocket: ${selectedRocketType}`);
+            
+            // Switch to waiting room screen
+            switchScreen('loginScreen', 'waitingRoomScreen');
+            
+            // The player list will be updated when the server sends back the player data
         } else {
-            startGameBtn.disabled = true;
-            startGameBtn.textContent = 'Waiting for host to start...';
+            console.error('Socket connection not available');
+            showSystemMessage('Connection to server failed. Please refresh and try again.');
         }
-        
-        updatePlayerList();
     }
     
     
     // Add a player to the list
     function addPlayer(id, name, isPlayerHost = false, rocketType) {
         // Check if player already exists
-        if (!players.some(p => p.id === id)) {
+        if (!players[id]) { // Check if the key exists in the object
             // Add new player with consistent structure
-            const newPlayer = {
-                id: id, 
-                name: name, 
-                isHost: isPlayerHost, 
+            players[id] = {
+                id: id,
+                name: name,
+                isHost: isPlayerHost,
                 rocketType: rocketType,
-                x: 0, 
-                y: 0, 
-                targetX: 0, 
-                targetY: 0, 
-                rotation: 0, 
+                x: 0,
+                y: 0,
+                targetX: 0,
+                targetY: 0,
+                rotation: 0,
                 isMoving: false
             };
-            
-            players.push(newPlayer);
             console.log(`Player added: ${name} (${id}), Host: ${isPlayerHost}`);
         } else {
             console.log(`Player ${name} (${id}) already exists, not adding duplicate`);
@@ -277,9 +306,10 @@ document.addEventListener('DOMContentLoaded', () => {
         updatePlayerList();
     }
     
-    // Remove a player
+    // Remove a player from the list
     function removePlayer(id) {
         if (players[id]) {
+            console.log(`Player removed: ${players[id].name} (${id})`);
             delete players[id];
             updatePlayerList();
         }
@@ -289,7 +319,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updatePlayerList() {
         playerList.innerHTML = '';
         
-        Object.values(players).forEach(player => {
+        Object.values(players).forEach(player => { // Use Object.values to iterate over players
             const li = document.createElement('li');
             
             // Create rocket icon
