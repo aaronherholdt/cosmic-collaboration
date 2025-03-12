@@ -270,6 +270,7 @@ document.addEventListener('DOMContentLoaded', () => {
             player.isMoving = false;
             player.rocketType = selectedRocketType;
             player.name = name;
+            player.visible = true; // Make sure player is visible
             
             // Ensure we have a local player entry in the players object
             players[currentPlayerId] = {
@@ -286,9 +287,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 visible: true // Explicitly set visibility
             };
             
+            // Set the currentPlayer reference to the player in the players object
+            currentPlayer = players[currentPlayerId];
+            
             console.log(`Joining game with name: ${name}, rocket: ${selectedRocketType}`);
             console.log("Player initialized at position:", player.x, player.y);
-            console.log("Players object after joining:", players);
+            console.log("currentPlayer reference set:", currentPlayer);
             
             // Emit join game event to server
             socket.emit('joinGame', {
@@ -317,6 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
             player.isMoving = false;
             player.rocketType = selectedRocketType;
             player.name = name;
+            player.visible = true;
             
             // Add to players object
             players[currentPlayerId] = {
@@ -333,9 +338,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 visible: true // Explicitly set visibility
             };
             
+            // Set the currentPlayer reference to the player in the players object
+            currentPlayer = players[currentPlayerId];
+            
             console.log(`Joining offline game with name: ${name}, rocket: ${selectedRocketType}`);
             console.log("Player initialized at position:", player.x, player.y);
-            console.log("Players object after joining:", players);
+            console.log("currentPlayer reference set:", currentPlayer);
             
             // Switch to waiting room screen
             switchScreen('loginScreen', 'waitingRoomScreen');
@@ -1913,6 +1921,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 x: player.x,
                 y: player.y
             });
+        }
+        
+        // Sync with players object
+        if (currentPlayerId && players[currentPlayerId]) {
+            players[currentPlayerId].x = player.x;
+            players[currentPlayerId].y = player.y;
+            players[currentPlayerId].isMoving = false;
+            players[currentPlayerId].rotation = player.rotation;
+            players[currentPlayerId].visible = true; // Ensure visibility
+            
+            // Keep currentPlayer in sync
+            currentPlayer = players[currentPlayerId];
         }
     }
     
@@ -3515,6 +3535,11 @@ document.addEventListener('DOMContentLoaded', () => {
         updatePlayerPosition();
 
 
+        
+        // Make sure currentPlayer is defined and points to the right player object
+        if (currentPlayerId && players[currentPlayerId]) {
+            currentPlayer = players[currentPlayerId];
+        }
         
         // Draw the current player's rocket
         if (currentPlayer) {
@@ -5652,6 +5677,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Camera follows ONLY the current player's rocket
         if (currentPlayer) {
             cameraX = currentPlayer.x;
+            cameraY = currentPlayer.y;
         }
     }
-});     
+});
