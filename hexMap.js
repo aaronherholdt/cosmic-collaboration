@@ -80,6 +80,11 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Connection error:', error);
             showSystemMessage('Connection error: ' + error.message, 5000);
         });
+
+        socket.on('gameStarted', () => {
+            console.log('Received gameStarted event on client:', currentPlayerId, 'isHost:', isHost);
+            startGame();
+        });
         
         socket.on('playerJoined', (player) => {
             // Add the new player to our local list
@@ -554,13 +559,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Start the game
     function startGame() {
-        console.log('Starting game... Host:', isHost, 'Game already started:', isGameStarted);
-        
-        // Non-hosts can't start the game unless it's already started by the server
-        if (!isHost && !isGameStarted) {
-            showSystemMessage('Only the host can start the game.', 3000);
-            return;
-        }
         
         // Switch to game screen
         switchScreen(waitingRoomScreen, gameScreen);
@@ -586,6 +584,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Switch between screens
     function switchScreen(fromScreen, toScreen) {
+        console.log('Switching screen for client', currentPlayerId, 'from', fromScreen.id, 'to', toScreen.id);
         fromScreen.classList.remove('active');
         toScreen.classList.add('active');
     }
