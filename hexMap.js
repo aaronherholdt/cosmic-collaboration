@@ -261,23 +261,94 @@ document.addEventListener('DOMContentLoaded', () => {
         if (socket && socket.connected) {
             currentPlayerId = socket.id;
             
+            // Initialize player position before adding to players object
+            player.x = galaxyCenterX + (Math.random() - 0.5) * galaxyRadius * 0.5;
+            player.y = galaxyCenterY + (Math.random() - 0.5) * galaxyRadius * 0.5;
+            player.targetX = player.x;
+            player.targetY = player.y;
+            player.rotation = 0;
+            player.isMoving = false;
+            player.rocketType = selectedRocketType;
+            player.name = name;
+            
+            // Ensure we have a local player entry in the players object
+            players[currentPlayerId] = {
+                id: currentPlayerId,
+                name: name,
+                isHost: false, // Server will set this correctly
+                rocketType: selectedRocketType,
+                x: player.x,
+                y: player.y,
+                targetX: player.x,
+                targetY: player.y,
+                rotation: 0,
+                isMoving: false,
+                visible: true // Explicitly set visibility
+            };
+            
+            console.log(`Joining game with name: ${name}, rocket: ${selectedRocketType}`);
+            console.log("Player initialized at position:", player.x, player.y);
+            console.log("Players object after joining:", players);
+            
             // Emit join game event to server
             socket.emit('joinGame', {
                 playerName: name,
-                rocketType: selectedRocketType
+                rocketType: selectedRocketType,
+                position: {
+                    x: player.x,
+                    y: player.y
+                }
             });
-            
-            // Let the server handle adding the player
-            console.log(`Joining game with name: ${name}, rocket: ${selectedRocketType}`);
             
             // Switch to waiting room screen
             switchScreen('loginScreen', 'waitingRoomScreen');
             
             // The player list will be updated when the server sends back the player data
         } else {
-            console.error('Socket connection not available');
-            showSystemMessage('Connection to server failed. Please refresh and try again.');
+            // Fallback for offline testing - create a simulated player ID
+            currentPlayerId = 'local-' + Date.now();
+            
+            // Initialize player position
+            player.x = galaxyCenterX + (Math.random() - 0.5) * galaxyRadius * 0.5;
+            player.y = galaxyCenterY + (Math.random() - 0.5) * galaxyRadius * 0.5;
+            player.targetX = player.x;
+            player.targetY = player.y;
+            player.rotation = 0;
+            player.isMoving = false;
+            player.rocketType = selectedRocketType;
+            player.name = name;
+            
+            // Add to players object
+            players[currentPlayerId] = {
+                id: currentPlayerId,
+                name: name,
+                isHost: true, // Local player is host in offline mode
+                rocketType: selectedRocketType,
+                x: player.x,
+                y: player.y,
+                targetX: player.x,
+                targetY: player.y,
+                rotation: 0,
+                isMoving: false,
+                visible: true // Explicitly set visibility
+            };
+            
+            console.log(`Joining offline game with name: ${name}, rocket: ${selectedRocketType}`);
+            console.log("Player initialized at position:", player.x, player.y);
+            console.log("Players object after joining:", players);
+            
+            // Switch to waiting room screen
+            switchScreen('loginScreen', 'waitingRoomScreen');
+            
+            // For offline testing, simulate other players
+            simulateSocketConnection();
         }
+        
+        // Debug - force a redraw to see if player appears
+        setTimeout(() => {
+            console.log("Forcing redraw after join...");
+            drawPlayers();
+        }, 1000);
     }
     
     
@@ -2268,11 +2339,17 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Update and draw player
         updatePlayerPosition();
-        drawPlayer();
+        
+        // Draw the current player
+        if (currentPlayer) {
+            drawPlayer();
+        }
+        
+        // Draw all players (including the local player)
+        drawPlayers();
         
         // Draw mini-map
         drawMiniMap();
-        
         
         // Update pan limit indicator
         updatePanLimitIndicator();
@@ -2283,6 +2360,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update explore button position if active
         if (activeExploreButtonStar) {
             updateExploreButtonPosition();
+        }
+        
+        // Debug info - remove after fixing
+        if (players.length > 0 && !rocketsDebuggedOnce) {
+            console.log("Players in game:", players);
+            console.log("Current player:", currentPlayer);
+            rocketsDebuggedOnce = true;
         }
     }
     
@@ -3225,6 +3309,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Center camera on player
                 cameraX = player.x;
                 cameraY = player.y;
+                
+                // Important - update the players object with the current player's position
+                if (currentPlayerId && players[currentPlayerId]) {
+                    players[currentPlayerId].x = player.x;
+                    players[currentPlayerId].y = player.y;
+                    players[currentPlayerId].targetX = player.targetX;
+                    players[currentPlayerId].targetY = player.targetY;
+                    players[currentPlayerId].visible = true; // Ensure visibility
+                }
             }
             
             attempts++;
@@ -3241,6 +3334,15 @@ document.addEventListener('DOMContentLoaded', () => {
             // Center camera on player
             cameraX = player.x;
             cameraY = player.y;
+            
+            // Important - update the players object with the current player's position
+            if (currentPlayerId && players[currentPlayerId]) {
+                players[currentPlayerId].x = player.x;
+                players[currentPlayerId].y = player.y;
+                players[currentPlayerId].targetX = player.targetX;
+                players[currentPlayerId].targetY = player.targetY;
+                players[currentPlayerId].visible = true; // Ensure visibility
+            }
         }
     }
     
@@ -3252,22 +3354,46 @@ document.addEventListener('DOMContentLoaded', () => {
     function drawPlayers() {
         ctx.save();
 
+        // Make sure we have players to draw
+        if (!players || Object.keys(players).length === 0) {
+            console.warn("No players to draw!");
+            ctx.restore();
+            return;
+        }
+
+        console.log("Drawing players:", Object.keys(players).length);
+
         // Iterate over all players in the players object
         Object.values(players).forEach(p => {
+            // Skip undefined players
+            if (!p) {
+                console.warn("Undefined player in players object");
+                return;
+            }
+            
+            // Skip players without position data
+            if (typeof p.x === 'undefined' || typeof p.y === 'undefined') {
+                console.warn("Player missing position data:", p.id);
+                return;
+            }
+            
             // Convert world coordinates to screen coordinates
             const screenX = (p.x - cameraX) * zoom + canvas.width / 2;
             const screenY = (p.y - cameraY) * zoom + canvas.height / 2;
-
+            
             // Skip drawing if the player is off-screen
-            if (screenX < -player.size * zoom || screenX > canvas.width + player.size * zoom ||
-                screenY < -player.size * zoom || screenY > canvas.height + player.size * zoom) {
+            if (screenX < -player.size * zoom * 2 || screenX > canvas.width + player.size * zoom * 2 ||
+                screenY < -player.size * zoom * 2 || screenY > canvas.height + player.size * zoom * 2) {
                 return;
             }
 
+            // Set rocket rotation (default if not available)
+            const rotation = p.rotation || 0;
+            
             // Save context for transformations
             ctx.save();
             ctx.translate(screenX, screenY);
-            ctx.rotate(p.rotation + Math.PI / 2); // Adjust rotation so rocket points in movement direction
+            ctx.rotate(rotation);
 
             // Determine rocket color based on type
             let rocketColor;
@@ -3279,7 +3405,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 default: rocketColor = '#FFFFFF'; // Fallback color
             }
 
-            // Draw rocket (using a simplified triangle shape similar to the SVG in CSS)
+            // Draw rocket (using a simplified triangle shape)
             const rocketSize = player.size * zoom;
             ctx.beginPath();
             ctx.moveTo(0, -rocketSize * 0.5); // Top point
@@ -3292,12 +3418,39 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.lineWidth = 1 * zoom;
             ctx.stroke();
 
+            // Draw engine flame if moving
+            if (p.isMoving) {
+                ctx.beginPath();
+                ctx.moveTo(-rocketSize * 0.2, rocketSize * 0.5);
+                ctx.lineTo(0, rocketSize * 0.9);
+                ctx.lineTo(rocketSize * 0.2, rocketSize * 0.5);
+                ctx.closePath();
+                ctx.fillStyle = '#FFA500';
+                ctx.fill();
+            }
+
             // Restore context after drawing rocket
             ctx.restore();
 
             // Draw player name tag
-            drawPlayerNameTag(screenX, screenY, rocketSize, p.name, p.rocketType);
+            const playerName = p.name || `Player ${p.id ? p.id.substring(0, 5) : 'Unknown'}`;
+            drawPlayerNameTag(screenX, screenY, rocketSize, playerName, p.rocketType);
+            
+            // Debug - draw a circle around the player's position for visibility
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, rocketSize * 1.5, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
         });
+
+        // Log the current player's position for debugging
+        if (currentPlayerId && players[currentPlayerId]) {
+            const cp = players[currentPlayerId];
+            const screenX = (cp.x - cameraX) * zoom + canvas.width / 2;
+            const screenY = (cp.y - cameraY) * zoom + canvas.height / 2;
+            console.log(`Current player (${currentPlayerId}) at screen position: ${Math.round(screenX)}, ${Math.round(screenY)}`);
+        }
 
         ctx.restore();
     }
@@ -3348,19 +3501,43 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Start animation loop
     function animationLoop() {
+        // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+        // Draw game elements
         drawBackground();
         drawStarSystems();
         drawStarBoundaries();
-        drawPlayers(); // Replace drawPlayer() with drawPlayers()
+
+        const currentPlayer = players[currentPlayerId];
+
+        // Update and draw all players
+        updatePlayerPosition();
+
+
+        
+        // Draw the current player's rocket
+        if (currentPlayer) {
+            drawPlayer();
+        }
+        
+        // Draw all players' rockets (including other players)
+        drawPlayers();
+        
+        // Draw other UI elements
         updateAllPingPositions();
         updateMiniMap();
-
-        updatePlayerPosition();
         enforceCameraLimits();
         updatePanLimitIndicator();
+        
+        // Debug information - remove after fixing
+        if (players.length > 0 && !rocketsDebuggedOnce) {
+            console.log("Animation loop - Players:", players);
+            console.log("Animation loop - Current player:", currentPlayer);
+            rocketsDebuggedOnce = true;
+        }
 
+        // Continue animation loop
         requestAnimationFrame(animationLoop);
     }
     animationLoop();
@@ -5475,12 +5652,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // Camera follows ONLY the current player's rocket
         if (currentPlayer) {
             cameraX = currentPlayer.x;
-            cameraY = currentPlayer.y;
         }
     }
-
-    // Add this function before the animationLoop function in hexMap.js
-    
-    // Add this function before the animationLoop function in hexMap.js
-    
-}); 
+});     
