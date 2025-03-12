@@ -1965,10 +1965,10 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Sync with players object
         if (currentPlayerId && players[currentPlayerId]) {
-            players[currentPlayerId].x = player.x;
-            players[currentPlayerId].y = player.y;
-            players[currentPlayerId].isMoving = false;
-            players[currentPlayerId].rotation = player.rotation;
+            players[currentPlayerId].x = currentPlayer.x;
+            players[currentPlayerId].y = currentPlayer.y;
+            players[currentPlayerId].isMoving = currentPlayer.isMoving;
+            players[currentPlayerId].rotation = currentPlayer.rotation;
             players[currentPlayerId].visible = true; // Ensure visibility
             
             // Keep currentPlayer in sync
