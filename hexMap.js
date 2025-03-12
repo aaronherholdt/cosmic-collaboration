@@ -215,32 +215,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         currentPlayerName = name;
+        currentPlayerId = currentPlayerId || 'player_' + Math.random().toString(36).substr(2, 9); // Ensure ID is set
         
-        // If this is the first player, they become the host
-        if (Object.keys(players).length === 0) {
-            isHost = true;
+        // Ensure the current player is in players
+        if (!players[currentPlayerId]) {
+            addPlayer(currentPlayerId, name, Object.keys(players).length === 0, selectedRocketType);
         }
         
-        // Add player to the list with rocket type
-        addPlayer(currentPlayerId, name, isHost, selectedRocketType);
+        switchScreen('loginScreen', 'waitingRoomScreen');
         
-        // In a real implementation, emit to server
-        // socket.emit('joinGame', { id: currentPlayerId, name, rocketType: selectedRocketType });
-        
-        // Switch to waiting room screen
-        switchScreen(loginScreen, waitingRoomScreen);
-        
-        // Enable start button for host only
         if (isHost) {
             startGameBtn.disabled = false;
             startGameBtn.textContent = 'Start Game';
-            
-            // Simulate other players joining (only if you're the host)
             simulateOtherPlayersJoining();
         } else {
             startGameBtn.disabled = true;
             startGameBtn.textContent = 'Waiting for host to start...';
         }
+        
+        updatePlayerList();
     }
     
     // Simulate other players joining (for demo purposes)
@@ -460,20 +453,31 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!hubGoals[resourceType]) return false;
 
         const currentPlayer = players[currentPlayerId];
-        
-        // Remove inventory check and deduction - assume harvest already handles this
+        if (!currentPlayer) {
+            console.error(`Current player not found for ID: ${currentPlayerId}`);
+            // Fallback: Create a temporary player entry if missing
+            players[currentPlayerId] = {
+                id: currentPlayerId,
+                name: currentPlayerName,
+                isHost: isHost,
+                rocketType: selectedRocketType,
+                contributions: {}
+            };
+        }
+
+        // Proceed with contribution
         hubGoals[resourceType].current = Math.min(hubGoals[resourceType].target, hubGoals[resourceType].current + amount);
         galacticHub.contributedResources[resourceType] += amount;
         
-        if (!currentPlayer.contributions) {
-            currentPlayer.contributions = {};
+        if (!players[currentPlayerId].contributions) {
+            players[currentPlayerId].contributions = {};
         }
-        if (!currentPlayer.contributions[resourceType]) {
-            currentPlayer.contributions[resourceType] = 0;
+        if (!players[currentPlayerId].contributions[resourceType]) {
+            players[currentPlayerId].contributions[resourceType] = 0;
         }
-        currentPlayer.contributions[resourceType] += amount;
+        players[currentPlayerId].contributions[resourceType] += amount;
 
-        console.log(`Contributing ${amount} ${resourceType}. New total: ${hubGoals[resourceType].current}/${hubGoals[resourceType].target}`); // Debug
+        console.log(`Contributing ${amount} ${resourceType}. New total: ${hubGoals[resourceType].current}/${hubGoals[resourceType].target}`);
         
         updateHubProgress();
         updatePlayerContributionsDisplay();
@@ -4990,8 +4994,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function getStarScreenPosition(star) {
         // Convert world coordinates to screen coordinates
         return {
-            x: (star.x - offsetX) * scale + canvas.width / 2,
-            y: (star.y - offsetY) * scale + canvas.height / 2
+            x: (star.x - cameraX) * zoom + canvas.width / 2,
+            y: (star.y - cameraY) * zoom + canvas.height / 2
         };
     }
 
@@ -5283,6 +5287,4 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     }
-
-    // Add these CSS styles in your styles.css file
 }); 
