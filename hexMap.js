@@ -1646,7 +1646,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Get rocket color based on type
         let rocketColor;
-        switch(player.rocketType) {
+        switch(currentPlayer.rocketType) {
             case 'red':
                 rocketColor = '#FF5252';
                 break;
@@ -1846,7 +1846,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.strokeRect(fuelX, fuelY, fuelWidth, fuelHeight);
         
         // Fuel level with gradient
-        const fuelLevel = (player.fuel / player.maxFuel) * fuelWidth;
+        const fuelLevel = (currentPlayer.fuel / currentPlayer.maxFuel) * fuelWidth;
         let fuelGradient;
         
         if (player.fuel > 70) {
@@ -1877,7 +1877,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.textBaseline = 'middle';
         
         // Draw text outline by offsetting in multiple directions
-        const fuelText = `FUEL: ${Math.floor(player.fuel)}%`;
+        const fuelText = `FUEL: ${Math.floor(currentPlayer.fuel)}%`;
         const textX = fuelX + fuelWidth / 2;
         const textY = fuelY + fuelHeight / 2;
         const outlineWidth = 2;
@@ -1895,28 +1895,28 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Update player position (move towards target)
     function updatePlayerPosition() {
-        if (player.isMoving) {
+        if (currentPlayer.isMoving) {
             // Calculate direction to target
-            const dx = player.targetX - player.x;
-            const dy = player.targetY - player.y;
+            const dx = currentPlayer.targetX - currentPlayer.x;
+            const dy = currentPlayer.targetY - currentPlayer.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
             // Update rotation to face target
-            player.rotation = Math.atan2(dy, dx) + Math.PI / 2;
+            currentPlayer.rotation = Math.atan2(dy, dx) + Math.PI / 2;
             
             // If close to target, stop moving
-            if (distance < player.speed) {
-                player.x = player.targetX;
-                player.y = player.targetY;
-                player.isMoving = false;
+            if (distance < currentPlayer.speed) {
+                currentPlayer.x = currentPlayer.targetX;
+                currentPlayer.y = currentPlayer.targetY;
+                currentPlayer.isMoving = false;
             return;
         }
 
             // Calculate next position
-            const moveX = (dx / distance) * player.speed;
-            const moveY = (dy / distance) * player.speed;
-            const nextX = player.x + moveX;
-            const nextY = player.y + moveY;
+            const moveX = (dx / distance) * currentPlayer.speed;
+            const moveY = (dy / distance) * currentPlayer.speed;
+            const nextX = currentPlayer.x + moveX;
+            const nextY = currentPlayer.y + moveY;
             
             // Check if next position would collide with any star
             let collision = false;
@@ -1936,24 +1936,24 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             if (collision) {
-                player.isMoving = false;
+                currentPlayer.isMoving = false;
                 showExploreButton(collidedStar);
             } else {
                 // Move towards target if no collision
-                player.x = nextX;
-                player.y = nextY;
+                currentPlayer.x = nextX;
+                currentPlayer.y = nextY;
                 
                 // Consume fuel
-                player.fuel = Math.max(0, player.fuel - 0.1);
+                currentPlayer.fuel = Math.max(0, currentPlayer.fuel - 0.1);
                 
                 // If out of fuel, stop moving
-                if (player.fuel <= 0) {
-                    player.isMoving = false;
+                if (currentPlayer.fuel <= 0) {
+                    currentPlayer.isMoving = false;
                 }
                 
                 // Center camera on player
-                cameraX = player.x;
-                cameraY = player.y;
+                cameraX = currentPlayer.x;
+                cameraY = currentPlayer.y;
                 
                 // Enforce camera limits
                 enforceCameraLimits();
